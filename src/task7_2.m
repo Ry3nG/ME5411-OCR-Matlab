@@ -208,6 +208,8 @@ imagesc(conf_matrix_norm);
 colormap(flipud(gray));  % Black for high values, white for low
 colorbar;
 caxis([0, 1]);
+% Set axes background to white
+set(gca, 'Color', 'white');
 
 % Add text annotations (count + percentage)
 for i = 1:num_classes
@@ -247,12 +249,17 @@ fprintf('Generating per-class accuracy chart...\n');
 fig = figure('Position', [100, 100, 800, 500], 'Color', 'white');
 set(fig, 'ToolBar', 'none', 'MenuBar', 'none');
 bar(1:num_classes, class_accuracy * 100, 'FaceColor', [0.2, 0.4, 0.6]);
+% Set axes background to white and text to black
+set(gca, 'Color', 'white');
+set(gca, 'XColor', 'black');
+set(gca, 'YColor', 'black');
 xlabel('Class', 'FontSize', 12, 'FontWeight', 'bold', 'Color', 'black');
 ylabel('Accuracy (%)', 'FontSize', 12, 'FontWeight', 'bold', 'Color', 'black');
 xticks(1:num_classes);
 xticklabels(class_names);
 ylim([0, 100]);
 grid on;
+set(gca, 'GridColor', [0.8, 0.8, 0.8]);  % Light gray grid
 
 % Add value labels on bars
 for c = 1:num_classes
@@ -282,10 +289,15 @@ for c = 1:num_classes
     fig = figure('Position', [100, 100, 900, 450], 'Color', 'white');
     set(fig, 'ToolBar', 'none', 'MenuBar', 'none');
     bar(1:length(histogram_values), histogram_values, 'FaceColor', [0.3, 0.5, 0.7]);
+    % Set axes background to white and text to black
+    set(gca, 'Color', 'white');
+    set(gca, 'XColor', 'black');
+    set(gca, 'YColor', 'black');
     xlabel('Visual Word Index', 'FontSize', 10, 'Color', 'black');
     ylabel('Frequency (Normalized)', 'FontSize', 10, 'Color', 'black');
     xlim([0, length(histogram_values) + 1]);
     grid on;
+    set(gca, 'GridColor', [0.8, 0.8, 0.8]);  % Light gray grid
     saveas(fig, fullfile(output_dir, sprintf('bow_hist_%s.png', class_names{c})));
     close(fig);
 end

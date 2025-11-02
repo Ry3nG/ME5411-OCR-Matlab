@@ -14,9 +14,23 @@ function [lr] = lrSchedule(curr_epoch, total_epoch, options)
             relative_pos = mod(curr_epoch, cycle_length) / cycle_length;
             lr = lr_min + 0.5 * (lr_max - lr_min) * (1 + cos(pi * relative_pos));
         case 'step'
-            lr = lr_max * 0.1 ^ (floor(curr_epoch / 30));
+            % Configurable step decay: lr = lr_max * gamma ^ (floor(epoch / step_size))
+            step_size = 30;  % default
+            gamma = 0.1;     % default
+            if isfield(options, 'lr_step_size')
+                step_size = options.lr_step_size;
+            end
+            if isfield(options, 'lr_gamma')
+                gamma = options.lr_gamma;
+            end
+            lr = lr_max * gamma ^ (floor(curr_epoch / step_size));
         case 'exp'
-            lr = lr_max * exp(-0.1*curr_epoch);
+            % Configurable exponential decay: lr = lr_max * decay_rate ^ epoch
+            decay_rate = exp(-0.1);  % default (~ 0.905)
+            if isfield(options, 'lr_decay_rate')
+                decay_rate = options.lr_decay_rate;
+            end
+            lr = lr_max * (decay_rate ^ curr_epoch);
         case 'const'
             lr = lr_max;
         case 'fixed'

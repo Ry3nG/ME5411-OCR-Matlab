@@ -1,506 +1,451 @@
-# Task 8 Preliminary Plan: Sensitivity Analysis
+# Task 8 Implementation Plan: Sensitivity Analysis
 
-**Date**: 2025-11-02
-**Status**: Planning Phase
-**Goal**: Experiment with preprocessing and hyperparameter tuning to analyze sensitivity
+**Last Updated**: 2025-11-03
+**Status**: Ready for Execution
+**Goal**: Systematic ablation study on preprocessing and hyperparameters
 
 ---
 
 ## Task 8 Requirements
 
-From the project brief:
+From ME5411_CA_2025.pdf:
 > In carrying out Step 7, also experiment with **pre-processing of the data** (e.g., padding/resizing the input images) as well as with **hyperparameter tuning**. In your report, discuss your findings and how **sensitive your approach is to these changes**.
 
-**Key Objectives**:
-1. Test different preprocessing approaches
-2. Tune hyperparameters systematically
-3. Analyze sensitivity of the model to each change
-4. Compare effectiveness and efficiency
-5. Document findings in report
+**Key Deliverables**:
+1. Ablation experiments on preprocessing (data augmentation)
+2. Ablation experiments on critical hyperparameters
+3. Sensitivity analysis with clear visualizations
+4. Concise report section (4-5 pages) following project guidelines
 
 ---
 
-## Experiment Categories
+## Baseline Configuration (Task 7.1)
 
-### Category A: Preprocessing Experiments
+```
+Architecture:
+  Input: 124×124×1
+  Conv1: 5×5×16, ReLU, MaxPool 2×2 → 60×60×16
+  Conv2: 5×5×32, ReLU, MaxPool 2×2 → 28×28×32
+  Conv3: 5×5×64, ReLU, MaxPool 2×2 → 12×12×64
+  FC1: 9216 → 128, ReLU, Dropout(0.3)
+  Output: 128 → 7, Softmax
 
-#### A1. Input Image Size
-**Research Question**: How does input resolution affect accuracy and training time?
+Hyperparameters:
+  - Image size: 124×124
+  - Epochs: 30
+  - Batch size: 128
+  - Learning rate: 0.1 → 1e-5 (linear decay)
+  - Momentum: 0.9
+  - Dropout: 0.3 (FC layer only)
+  - L2 regularization: disabled
+  - Data augmentation: disabled
 
-**Experiments**:
-- [ ] 64×64 (quarter resolution)
-- [ ] 96×96 (3/4 resolution)
-- [ ] 124×124 (current baseline)
-- [ ] 156×156 (1.25× resolution)
-- [ ] 192×192 (1.5× resolution)
-
-**Metrics to Track**:
-- Test accuracy
-- Training time per epoch
-- Model parameters count
-- Memory usage
-
-**Expected Insights**:
-- Trade-off between resolution and computation
-- Minimum resolution needed for good performance
-- Diminishing returns of higher resolution
-
----
-
-#### A2. Padding Strategies
-**Research Question**: Does padding method affect character recognition?
-
-**Experiments**:
-- [ ] Zero padding (current)
-- [ ] Edge replication padding
-- [ ] Reflection padding
-- [ ] Mean value padding
-
-**Metrics to Track**:
-- Per-class accuracy (especially boundary-sensitive characters)
-- Overall test accuracy
-
-**Expected Insights**:
-- Impact of boundary artifacts on learning
-- Which characters are most affected
+Performance (expected):
+  - Test accuracy: ~XX% (to be measured)
+  - Training time: ~25-30 min/run
+```
 
 ---
 
-#### A3. Normalization Methods
-**Research Question**: How does normalization affect training stability and accuracy?
+## Ablation Study Design
 
-**Experiments**:
-- [ ] No normalization (if currently used)
-- [ ] Min-max normalization [0, 1]
-- [ ] Z-score normalization (mean=0, std=1)
-- [ ] Per-image normalization
-- [ ] Global dataset normalization
-
-**Metrics to Track**:
-- Training convergence speed
-- Final accuracy
-- Training stability (loss variance)
-
-**Expected Insights**:
-- Best normalization for grayscale character images
-- Impact on gradient flow
-
----
-
-#### A4. Data Augmentation (if implemented)
-**Research Question**: Does augmentation improve generalization?
-
-**Experiments**:
-- [ ] No augmentation (baseline)
-- [ ] Rotation only (±15°, ±25°)
-- [ ] Translation only (±5%, ±10%)
-- [ ] Combined rotation + translation
-- [ ] Elastic deformation
-- [ ] Noise injection
-
-**Metrics to Track**:
-- Training vs test accuracy gap
-- Per-class robustness
-- Training time increase
-
-**Expected Insights**:
-- Does augmentation help with limited dataset?
-- Which augmentation works best for characters?
-
----
-
-### Category B: Network Architecture Experiments
-
-#### B1. Convolutional Layer Depth
-**Research Question**: How many conv layers are optimal?
-
-**Experiments**:
-- [ ] 2 conv layers
-- [ ] 3 conv layers (current baseline)
-- [ ] 4 conv layers
-- [ ] 5 conv layers
-
-**Fixed Variables**: Keep filters progression, pooling, FC layers similar
-
-**Metrics to Track**:
-- Accuracy
-- Training time
-- Overfitting tendency
-
----
-
-#### B2. Filter Count Progression
-**Research Question**: How does filter count affect capacity?
-
-**Experiments**:
-- [ ] Small: 8→16→32
-- [ ] Baseline: 16→32→64 (improved design)
-- [ ] Large: 32→64→128
-- [ ] Very Large: 64→128→256
-
-**Metrics to Track**:
-- Accuracy improvement vs parameters
-- Training time scaling
-- Memory requirements
-
-**Expected Insights**:
-- Diminishing returns of more filters
-- Computational vs accuracy trade-off
-
----
-
-#### B3. Filter Size
-**Research Question**: 3×3 vs 5×5 vs 7×7?
-
-**Experiments**:
-- [ ] All 3×3 (modern approach)
-- [ ] All 5×5 (current)
-- [ ] All 7×7 (traditional)
-- [ ] Mixed: 7→5→3 (coarse to fine)
-- [ ] Mixed: 3→3→3 (deeper with same receptive field)
-
-**Metrics to Track**:
-- Accuracy
-- Parameter efficiency
-- Inference speed
-
----
-
-#### B4. Pooling Strategy
-**Research Question**: Impact of pooling size and placement?
-
-**Experiments**:
-- [ ] No pooling (stride in conv)
-- [ ] All 2×2 (current baseline)
-- [ ] Progressive: 2→2→4
-- [ ] Aggressive: 4→4→2
-- [ ] Average pooling vs Max pooling
-
-**Metrics to Track**:
-- Spatial information retention
-- Accuracy on characters with fine details
-
----
-
-#### B5. Fully Connected Layer Design
-**Research Question**: How much FC capacity is needed?
-
-**Experiments**:
-- [ ] Direct: 9216→7 (no hidden layer)
-- [ ] Small: 9216→64→7
-- [ ] Baseline: 9216→128→7
-- [ ] Large: 9216→256→128→7
-- [ ] Very Large: 9216→512→256→7
-
-**Metrics to Track**:
-- Accuracy
-- Overfitting tendency
-- Parameter count
-
----
-
-### Category C: Regularization Experiments
-
-#### C1. Dropout Rate
-**Research Question**: Optimal dropout strength?
-
-**Experiments**:
-- [ ] No dropout (0.0)
-- [ ] Light: 0.1
-- [ ] Moderate: 0.2
-- [ ] Strong: 0.3 (current)
-- [ ] Very strong: 0.5
-- [ ] Dropout on multiple layers
-
-**Metrics to Track**:
-- Train-test accuracy gap
-- Convergence speed
-- Final test accuracy
-
----
-
-#### C2. L2 Regularization (Weight Decay)
-**Research Question**: Does L2 help or hurt?
-
-**Experiments**:
-- [ ] No L2 (current)
-- [ ] Weak: λ = 1e-5
-- [ ] Moderate: λ = 1e-4, 1e-3
-- [ ] Strong: λ = 1e-2
-- [ ] Combined with dropout
-
-**Metrics to Track**:
-- Generalization gap
-- Weight magnitude distribution
-
----
-
-### Category D: Training Hyperparameters
-
-#### D1. Learning Rate
-**Research Question**: Optimal initial learning rate?
-
-**Experiments**:
-- [ ] Very low: 0.01
-- [ ] Low: 0.05
-- [ ] Baseline: 0.1
-- [ ] High: 0.2
-- [ ] Very high: 0.5
-
-**Metrics to Track**:
-- Convergence speed
-- Training stability
-- Final accuracy
-
----
-
-#### D2. Learning Rate Schedule
-**Research Question**: Which decay strategy works best?
-
-**Experiments**:
-- [ ] Constant (no decay)
-- [ ] Linear decay (current)
-- [ ] Exponential decay
-- [ ] Step decay (drop every N epochs)
-- [ ] Cosine annealing
-- [ ] Warm restart
-
-**Metrics to Track**:
-- Training curve smoothness
-- Final convergence
-- Training time to reach target accuracy
-
----
-
-#### D3. Batch Size
-**Research Question**: Impact on convergence and generalization?
-
-**Experiments**:
-- [ ] Small: 32
-- [ ] Medium: 64
-- [ ] Baseline: 128
-- [ ] Large: 256
-- [ ] Very large: 512
-
-**Metrics to Track**:
-- Training time per epoch
-- Generalization (small batch theory)
-- Memory usage
-- Convergence stability
-
----
-
-#### D4. Optimizer
-**Research Question**: SGD with momentum vs alternatives?
-
-**Experiments**:
-- [ ] SGD (no momentum)
-- [ ] SGD + Momentum 0.9 (current)
-- [ ] Different momentum: 0.8, 0.95, 0.99
-- [ ] (If available) Adam, RMSprop, AdaGrad
-
-**Note**: May need to implement other optimizers if not available
-
----
-
-#### D5. Training Duration
-**Research Question**: Are 30 epochs enough?
-
-**Experiments**:
-- [ ] Short: 15 epochs
-- [ ] Baseline: 30 epochs
-- [ ] Long: 50 epochs
-- [ ] Very long: 100 epochs
-- [ ] Early stopping based on validation
-
-**Metrics to Track**:
-- When does accuracy plateau?
-- Signs of overfitting at later epochs
-- Training time vs accuracy trade-off
-
----
-
-## Recommended Experiment Priorities
-
-### Priority 1: High Impact, Must Do
-1. **Input image size** (A1) - Directly addresses task requirement
-2. **Dropout rate** (C1) - Key regularization parameter
-3. **Learning rate** (D1) - Most critical hyperparameter
-4. **Batch size** (D3) - Affects both speed and accuracy
-
-### Priority 2: Important, Should Do
-5. **Filter count** (B2) - Understand capacity needs
-6. **Learning rate schedule** (D2) - Optimization efficiency
-7. **Training duration** (D5) - Efficiency analysis
-
-### Priority 3: Nice to Have, Time Permitting
-8. **Normalization** (A3)
-9. **FC layer design** (B5)
-10. **Filter size** (B3)
-
-### Priority 4: Research Extensions
-11. Data augmentation (A4) - if implemented
-12. L2 regularization (C2)
-13. Pooling strategy (B4)
-
----
-
-## Experimental Framework Design
-
-### Approach 1: One-at-a-Time (Recommended)
-- Change one variable at a time from baseline
-- Easy to interpret results
+### Approach: One-Factor-at-a-Time (OFAT)
+- Change **one variable** at a time from baseline
 - Clear cause-effect relationships
-- More experiments needed but clearer insights
-
-### Approach 2: Grid Search
-- Test combinations of 2-3 key hyperparameters
-- More comprehensive but exponentially more experiments
-- Example: LR × Batch Size × Dropout
-  - 4 × 4 × 4 = 64 experiments (infeasible)
-
-### Approach 3: Random Search
-- Randomly sample from hyperparameter space
-- More efficient than grid for high dimensions
-- May miss optimal combinations
-
-### Approach 4: Progressive Refinement
-1. Start with Priority 1 experiments
-2. Pick best configuration from each
-3. Use as new baseline
-4. Continue with Priority 2 experiments
-
-**Recommendation**: Use Approach 1 (one-at-a-time) for Priority 1-2 experiments.
+- Easy to interpret and visualize
+- **Baseline (exp00) included** - saves to output/task7_1 directory
+- Total: **13 experiments, ~5.5 hours compute time**
 
 ---
 
-## Implementation Strategy
+## Part A: Preprocessing Ablations (5 experiments)
+
+**Research Question**: How does data augmentation affect generalization?
+
+### Experiment Group A: Data Augmentation
+
+| Exp ID | Name | Translation | Rotation | Scale | Description |
+|--------|------|-------------|----------|-------|-------------|
+| **exp00** | baseline | None | None | None | No augmentation (baseline) |
+| **exp01** | translation | ±2% | None | None | Translation only |
+| **exp02** | rotation | None | ±15° | None | Rotation only |
+| **exp03** | scale | None | None | 0.9-1.1× | Scale only |
+| **exp04** | all_aug | ±2% | ±15° | 0.9-1.1× | All combined |
+
+**Configuration Details**:
+```matlab
+% All experiments use probability = 0.5 for applying transforms
+
+% exp01: Translation only
+random_trans.prob = 0.5;
+random_trans.trans_ratio = 0.02;     % ±2% shift
+random_trans.rot_range = [0 0];
+random_trans.scale_ratio = [1 1];
+
+% exp02: Rotation only
+random_trans.prob = 0.5;
+random_trans.trans_ratio = 0;
+random_trans.rot_range = [-15 15];   % ±15 degrees
+random_trans.scale_ratio = [1 1];
+
+% exp03: Scale only
+random_trans.prob = 0.5;
+random_trans.trans_ratio = 0;
+random_trans.rot_range = [0 0];
+random_trans.scale_ratio = [0.9 1.1]; % 90%-110%
+
+% exp04: All combined
+random_trans.prob = 0.5;
+random_trans.trans_ratio = 0.02;
+random_trans.rot_range = [-15 15];
+random_trans.scale_ratio = [0.9 1.1];
+```
+
+**Fixed Variables**: img_dim=124, lr=0.1, lr_method='linear', batch_size=128, dropout=0.3
+
+**Metrics to Track**:
+- Test accuracy (primary)
+- Train-test accuracy gap (overfitting indicator)
+- Training time
+- Per-class accuracy (identify which classes benefit most)
+
+**Expected Insights**:
+1. Does augmentation improve generalization? (compare exp00 vs exp04)
+2. Which augmentation is most effective? (compare exp01, 02, 03)
+3. Is there diminishing return or over-augmentation? (exp04 vs best individual)
+
+---
+
+## Part B: Hyperparameter Ablations (8 experiments)
+
+**Research Question**: Which hyperparameters are most sensitive?
+
+### Experiment Group B1: Learning Rate Magnitude (3 experiments)
+
+| Exp ID | Name | LR | LR Schedule | Batch Size | Other |
+|--------|------|----|-------------|------------|-------|
+| **exp00** | baseline | 0.1 | linear | 128 | (reference) |
+| **exp05** | lr0.05 | 0.05 | linear | 128 | Half LR |
+| **exp06** | lr0.2 | 0.2 | linear | 128 | Double LR |
+| **exp07** | lr0.3 | 0.3 | linear | 128 | Triple LR |
+
+**Fixed Variables**: no augmentation, img_dim=124, dropout=0.3
+
+**Expected Insights**:
+- Optimal learning rate for convergence speed and final accuracy
+- Too low: slow convergence
+- Too high: unstable training or divergence
+
+---
+
+### Experiment Group B2: Learning Rate Schedule (3 experiments)
+
+| Exp ID | Name | LR | LR Schedule | Details |
+|--------|------|----|-------------|---------|
+| **exp00** | baseline | 0.1 | linear | 0.1 → 1e-5 over 30 epochs |
+| **exp08** | cosine | 0.1 | cosine | Cosine annealing |
+| **exp09** | exp_decay | 0.1 | exponential | γ=0.95 per epoch |
+| **exp10** | step_decay | 0.1 | step | ×0.1 every 10 epochs |
+
+**Configuration Details**:
+```matlab
+% exp08: Cosine annealing
+options.lr_method = 'cosine';
+options.lr_max = 0.1;
+options.lr_min = 1e-5;
+% LR = lr_min + 0.5 * (lr_max - lr_min) * (1 + cos(pi * epoch / total_epochs))
+
+% exp09: Exponential decay
+options.lr_method = 'exp';
+options.lr_decay_rate = 0.95;  % LR = LR * 0.95 per epoch
+
+% exp10: Step decay
+options.lr_method = 'step';
+options.lr_step_size = 10;     % Every 10 epochs
+options.lr_gamma = 0.1;        % Multiply by 0.1
+```
+
+**Fixed Variables**: no augmentation, img_dim=124, batch_size=128, dropout=0.3
+
+**Expected Insights**:
+- Which schedule achieves best final accuracy?
+- Training curve smoothness and stability
+- Time to reach target accuracy (e.g., 90%)
+
+---
+
+### Experiment Group B3: Batch Size (2 experiments)
+
+| Exp ID | Name | Batch Size | LR | Note |
+|--------|------|------------|-----|------|
+| **exp00** | baseline | 128 | 0.1 | (reference) |
+| **exp11** | bs64 | 64 | 0.1 | Smaller batch |
+| **exp12** | bs256 | 256 | 0.1 | Larger batch |
+
+**Fixed Variables**: no augmentation, img_dim=124, lr=0.1, lr_method='linear', dropout=0.3
+
+**Expected Insights**:
+- Small batch: better generalization? slower training?
+- Large batch: faster epoch? worse generalization?
+- Memory and time trade-offs
+
+---
+
+## Experiment Summary Table
+
+| Group | Exp ID | Name | Aug | LR | LR Schedule | BS | Time (est) |
+|-------|--------|------|-----|----|-----------|----|------------|
+| **A** | exp00 | baseline | none | 0.1 | linear | 128 | 25 min |
+| **A** | exp01 | translation | trans | 0.1 | linear | 128 | 25 min |
+| **A** | exp02 | rotation | rot | 0.1 | linear | 128 | 25 min |
+| **A** | exp03 | scale | scale | 0.1 | linear | 128 | 25 min |
+| **A** | exp04 | all_aug | all | 0.1 | linear | 128 | 25 min |
+| **B1** | exp05 | lr0.05 | none | 0.05 | linear | 128 | 25 min |
+| **B1** | exp06 | lr0.2 | none | 0.2 | linear | 128 | 25 min |
+| **B1** | exp07 | lr0.3 | none | 0.3 | linear | 128 | 25 min |
+| **B2** | exp08 | cosine | none | 0.1 | cosine | 128 | 25 min |
+| **B2** | exp09 | exp_decay | none | 0.1 | exp | 128 | 25 min |
+| **B2** | exp10 | step_decay | none | 0.1 | step | 128 | 25 min |
+| **B3** | exp11 | bs64 | none | 0.1 | linear | 64 | 30 min |
+| **B3** | exp12 | bs256 | none | 0.1 | linear | 256 | 20 min |
+| | | | | | **Total** | | **~5.5 hrs** |
+
+**Note**: exp00 (baseline) saves to `output/task7_1/` instead of `output/task8/exp00/` for consistency.
+
+---
+
+## Execution Strategy
+
+### Phase 1: Complete Run (all 13 experiments)
+Run exp00-12 in sequence
+- **Time**: ~5.5 hours total
+- **exp00** saves to output/task7_1 directory
+- **exp01-12** save to output/task8/exp##/ directories
+
+### Execution Priority:
+1. **Baseline first** (exp00) - establishes reference performance
+2. **Preprocessing experiments** (exp01-04) - directly addresses project requirement
+3. **Hyperparameter tuning** (exp05-12) - identifies sensitive parameters
+
+### Execution Options:
+1. **Sequential**: Run experiments one by one (easier to monitor)
+2. **Overnight batch**: Queue all 13 experiments to run overnight (recommended)
+3. **Parallel** (if multiple GPUs/machines): Run groups in parallel
+
+---
+
+## Implementation
 
 ### Code Structure
 ```
 src/
-├── task7_1.m              (baseline CNN)
-├── task7_2.m              (baseline non-CNN)
-├── task8_experiment.m     (main experiment runner)
-├── task8_preprocessing.m  (preprocessing variations)
-├── task8_hyperparams.m    (hyperparameter sweep)
+├── task7_1.m                    # Baseline CNN (existing)
+├── task8_run_experiments.m      # Main experiment runner (NEW)
+├── task8_single_experiment.m    # Single experiment wrapper (NEW)
 └── utils/
-    ├── run_experiment.m   (generic experiment wrapper)
-    ├── compare_results.m  (result comparison tool)
-    └── plot_sensitivity.m (sensitivity visualization)
+    ├── plot_task8_results.m     # Visualization script (NEW)
+    └── compare_experiments.m    # Results comparison (NEW)
 ```
 
-### Experiment Tracking
-Each experiment should save:
-- Configuration (JSON format)
-- Results (accuracy, time, etc.)
-- Model checkpoint
-- Training curves
-- Unique experiment ID
+### Experiment Runner Template
+```matlab
+% task8_run_experiments.m
+% Note: exp00 (baseline) saves to output/task7_1 instead of output/task8/exp00
 
-### Results Comparison
-Create comparison tables/plots:
-- Bar charts: accuracy vs hyperparameter
-- Line plots: training curves overlay
-- Heatmaps: 2D hyperparameter sensitivity
-- Scatter: accuracy vs training time
+experiments = {
+    % [id, name, aug_trans, aug_rot, aug_scale, lr, lr_method, batch_size]
+    {'exp00', 'baseline',     0,    [0 0],      [1 1],     0.1,  'linear', 128}
+    {'exp01', 'translation',  0.02, [0 0],      [1 1],     0.1,  'linear', 128}
+    {'exp02', 'rotation',     0,    [-15 15],   [1 1],     0.1,  'linear', 128}
+    {'exp03', 'scale',        0,    [0 0],      [0.9 1.1], 0.1,  'linear', 128}
+    {'exp04', 'all_aug',      0.02, [-15 15],   [0.9 1.1], 0.1,  'linear', 128}
+    {'exp05', 'lr0.05',       0,    [0 0],      [1 1],     0.05, 'linear', 128}
+    {'exp06', 'lr0.2',        0,    [0 0],      [1 1],     0.2,  'linear', 128}
+    {'exp07', 'lr0.3',        0,    [0 0],      [1 1],     0.3,  'linear', 128}
+    {'exp08', 'cosine',       0,    [0 0],      [1 1],     0.1,  'cosine', 128}
+    {'exp09', 'exp_decay',    0,    [0 0],      [1 1],     0.1,  'exp',    128}
+    {'exp10', 'step_decay',   0,    [0 0],      [1 1],     0.1,  'step',   128}
+    {'exp11', 'bs64',         0,    [0 0],      [1 1],     0.1,  'linear', 64}
+    {'exp12', 'bs256',        0,    [0 0],      [1 1],     0.1,  'linear', 256}
+};
 
----
+for i = 1:length(experiments)
+    fprintf('Running %s (%d/%d)...\n', experiments{i}{2}, i, length(experiments));
+    task8_single_experiment(experiments{i});
+end
+```
 
-## Report Structure for Task 8
+### Data Storage Format
+- **exp00** saves to: `output/task7_1/[timestamp]/`
+- **exp01-12** save to: `output/task8/[exp_id]/`
 
-### Section 1: Introduction
-- Brief recap of baseline CNN (Task 7.1)
-- Motivation for sensitivity analysis
-- Overview of experiments
+Each experiment directory contains:
+output/task8/exp00/
+├── cnn.mat                 # Trained model
+├── predictions.mat         # Test predictions
+├── hyper_params.json       # Configuration
+├── results.txt             # Text summary
+├── training_curve.png      # Training/test accuracy plot
+└── confusion_matrix.png    # Per-class results
+```
 
-### Section 2: Methodology
-- Description of experimental framework
-- Variables tested
-- Metrics used
-- Fixed baseline configuration
-
-### Section 3: Results
-
-#### 3.1 Preprocessing Experiments
-- Input size results
-- Best preprocessing configuration
-
-#### 3.2 Hyperparameter Tuning
-- Learning rate sensitivity
-- Batch size impact
-- Regularization effects
-
-#### 3.3 Comparative Analysis
-- Which parameters are most sensitive?
-- Which have minimal impact?
-- Interactions between parameters
-
-### Section 4: Discussion
-- Interpretation of sensitivity patterns
-- Practical recommendations
-- Trade-offs (accuracy vs speed vs memory)
-- Robustness analysis
-
-### Section 5: Conclusion
-- Optimal configuration found
-- Key insights learned
-- Applicability to similar tasks
+### Results Aggregation
+Create `output/task8/summary.mat` containing:
+```matlab
+summary = struct();
+summary.exp_ids = {'exp00', 'exp01', ...};
+summary.test_acc = [0.XX, 0.XX, ...];
+summary.train_acc = [0.XX, 0.XX, ...];
+summary.train_time = [1500, 1520, ...];  % seconds
+summary.configs = {...};  % Full config structs
+```
 
 ---
 
-## Time Estimates
+## Visualization Plan
 
-Assuming each experiment takes ~20-30 minutes:
+### Figure 1: Data Augmentation Comparison
+- **Type**: Bar chart
+- **X-axis**: Augmentation method (none, trans, rot, scale, all)
+- **Y-axis**: Test accuracy
+- **Error bars**: Train-test gap (optional)
+- **Insight**: Which augmentation helps most?
 
-| Priority | # Experiments | Total Time |
-|----------|---------------|------------|
-| Priority 1 (4 groups × ~4 variants) | ~16 | 8 hours |
-| Priority 2 (3 groups × ~4 variants) | ~12 | 6 hours |
-| Priority 3 (3 groups × ~4 variants) | ~12 | 6 hours |
-| **Feasible subset (P1 + P2)** | **~28** | **~14 hours** |
+### Figure 2: Training Curves - Augmentation
+- **Type**: Line plot overlay
+- **Lines**: exp00 (none) vs exp04 (all)
+- **X-axis**: Epoch
+- **Y-axis**: Accuracy (train and test)
+- **Insight**: Does augmentation reduce overfitting?
 
-**Practical Plan**: Focus on Priority 1 experiments (~16 runs, ~8 hours compute time)
+### Figure 3: Learning Rate Sensitivity
+- **Type**: Bar chart + line plot
+- **X-axis**: LR value (0.05, 0.1, 0.2, 0.3)
+- **Y-axis**: Test accuracy
+- **Secondary**: Training time
+- **Insight**: Optimal LR and speed trade-off
+
+### Figure 4: Learning Rate Schedule Comparison
+- **Type**: Training curves overlay
+- **Lines**: linear (baseline), cosine, exp, step
+- **X-axis**: Epoch
+- **Y-axis**: Test accuracy
+- **Insight**: Which schedule converges best?
+
+### Figure 5: Batch Size Effect
+- **Type**: Scatter plot
+- **X-axis**: Batch size (64, 128, 256)
+- **Y-axis**: Test accuracy
+- **Color/size**: Training time per epoch
+- **Insight**: Speed vs generalization trade-off
+
+### Figure 6: Overall Sensitivity Summary
+- **Type**: Horizontal bar chart
+- **Y-axis**: Parameter varied (aug, LR, schedule, BS)
+- **X-axis**: Accuracy range (max - min)
+- **Insight**: Most vs least sensitive parameters
+
+---
+
+## Report Structure (Task 8 Section)
+
+**Target**: 4-5 pages, following CLAUDE.md concise style
+
+```latex
+\section{Task 8: Sensitivity Analysis}
+
+\subsection{Methodology}
+% 0.5 page
+- Baseline configuration from Task 7.1
+- One-factor-at-a-time ablation approach
+- Two groups: preprocessing (augmentation) and hyperparameters
+- Metrics: test accuracy, training time, generalization gap
+
+\subsection{Results}
+
+\subsubsection{Preprocessing Sensitivity}
+% 1-1.5 pages
+- Figure: Augmentation comparison bar chart
+- Figure: Training curves (none vs all)
+- Observation: 1-2 sentences on findings
+
+\subsubsection{Hyperparameter Sensitivity}
+% 1.5-2 pages
+- Figure: LR magnitude comparison
+- Figure: LR schedule comparison
+- Figure: Batch size effect
+- Observation: 1-2 sentences per experiment group
+
+\subsubsection{Sensitivity Summary}
+% 0.5 page
+- Figure: Overall sensitivity comparison
+- Table: Best configuration from each group
+
+\subsection{Discussion and Conclusion}
+% 1 page, NO subsections
+- Brief explanation: Why certain parameters are more sensitive
+- Key findings (3-5 bullet points):
+  • Most sensitive parameter: [X] (±Y% accuracy change)
+  • Least sensitive: [Z]
+  • Recommended config: [...]
+  • Trade-off: augmentation adds +X% accuracy but +Y% time
+  • Generalization: [observation on train-test gap]
+- Computational note: 13 experiments, ~5.5 hours total
+- Conclusion (2-3 sentences): Summary and practical recommendation
+```
 
 ---
 
 ## Success Criteria
 
-- [ ] At least 10 different experiments completed
-- [ ] At least 3 preprocessing variations tested
-- [ ] At least 3 hyperparameter variations tested
-- [ ] Clear sensitivity analysis with visualizations
-- [ ] Identification of most and least sensitive parameters
-- [ ] Recommendations for optimal configuration
-- [ ] Discussion of trade-offs in report
+- [ ] 13 experiments completed (exp00-12)
+- [ ] All results saved in structured format
+- [ ] 6 visualization figures generated
+- [ ] Clear identification of most/least sensitive parameters
+- [ ] Recommended optimal configuration
+- [ ] Concise 4-5 page report section
+- [ ] All figures copied to report directory
 
 ---
 
-## Notes for Execution
-- Start AFTER Task 7.1 improvements are complete and validated
-- Use improved CNN as baseline (not original design)
-- Can run experiments in parallel if multiple machines available
-- Keep detailed logs for reproducibility
-- Budget time for report writing (~4-6 hours)
-- Some experiments may need to run overnight
+## Key Questions to Answer
+
+1. **Does data augmentation improve generalization?** (exp00 vs exp04)
+2. **Which augmentation technique is most effective?** (exp01-03)
+3. **What is the optimal learning rate?** (exp05-07)
+4. **Which LR schedule converges best?** (exp08-10)
+5. **How does batch size affect performance?** (exp11-12)
+6. **Which parameter is most sensitive?** (compare all groups)
+7. **What trade-offs exist?** (accuracy vs time, generalization vs speed)
+8. **Recommended configuration for production?** (final recommendation)
 
 ---
 
-## Questions to Answer in Report
+## Timeline
 
-1. How sensitive is the CNN to input image resolution?
-2. What is the minimum image size that maintains >90% accuracy?
-3. Does the model benefit more from architectural changes or hyperparameter tuning?
-4. What is the optimal learning rate and schedule?
-5. Is dropout at 0.3 optimal, or should it be adjusted?
-6. How much does batch size affect convergence and final accuracy?
-7. What trade-offs exist between training time and accuracy?
-8. Which parameters can be set "good enough" without fine-tuning?
-9. Are there any unexpected interactions between parameters?
-10. What configuration would you recommend for a production deployment?
+| Phase | Duration | Description |
+|-------|----------|-------------|
+| **Preparation** | ✅ Complete | Experiment scripts implemented |
+| **Execution** | 5.5 hours | Run all 13 experiments (exp00-12, overnight) |
+| **Analysis** | 2 hours | Generate visualizations and summary |
+| **Report Writing** | 2-3 hours | Write concise 4-5 page section |
+| **Total** | **~10 hours** | From execution to final report |
 
 ---
 
-**Status**: Ready for execution after Task 7.1 completion
-**Next Step**: Complete Task 7.1 improvements first
-**Estimated Start Date**: After Task 7.1 validation
+## Notes
+
+- **exp00 (baseline)** saves to `output/task7_1/` directory (timestamped subdirectory)
+- **exp01-12** save to `output/task8/exp##/` directories
+- **Use exp00 as reference**: All comparisons relative to baseline
+- **Resume support**: Safe to re-run if interrupted - skips completed experiments
+- **Monitor experiments**: Check master_log.txt for real-time status
+- **Save everything**: Models, configs, plots, logs for reproducibility
+- **Focus on clarity**: Visualizations should be self-explanatory
+- **Be concise**: Report should be dense with information, not verbose
+
+---
+
+**Status**: ✅ Implementation Complete, Ready to Run
+**Next Action**: Run `task8.m` in tmux overnight
+**Dependencies**: Dataset files (train.mat, test.mat) exist
