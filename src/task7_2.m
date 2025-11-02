@@ -181,7 +181,7 @@ fprintf('=== Stage 7: Generating Visualizations ===\n');
 
 % 1. Visualize SOM codebook (learned visual prototypes)
 fprintf('Generating SOM codebook visualization...\n');
-fig = figure('Position', [100, 100, 1000, 1000]);
+fig = figure('Position', [100, 100, 1000, 1000], 'Color', 'white');
 set(fig, 'ToolBar', 'none', 'MenuBar', 'none');
 for i = 1:som_model.num_neurons
     subplot(som_grid_size(1), som_grid_size(2), i);
@@ -202,7 +202,7 @@ close(fig);
 fprintf('Generating confusion matrix...\n');
 conf_matrix_norm = conf_matrix ./ sum(conf_matrix, 2);
 
-fig = figure('Position', [100, 100, 900, 800]);
+fig = figure('Position', [100, 100, 900, 800], 'Color', 'white');
 set(fig, 'ToolBar', 'none', 'MenuBar', 'none');
 imagesc(conf_matrix_norm);
 colormap(flipud(gray));  % Black for high values, white for low
@@ -230,8 +230,8 @@ for i = 1:num_classes
     end
 end
 
-xlabel('Predicted Class', 'FontSize', 12, 'FontWeight', 'bold');
-ylabel('True Class', 'FontSize', 12, 'FontWeight', 'bold');
+xlabel('Predicted Class', 'FontSize', 12, 'FontWeight', 'bold', 'Color', 'black');
+ylabel('True Class', 'FontSize', 12, 'FontWeight', 'bold', 'Color', 'black');
 xticks(1:num_classes);
 xticklabels(class_names);
 yticks(1:num_classes);
@@ -244,11 +244,11 @@ close(fig);
 
 % 3. Per-class accuracy bar chart
 fprintf('Generating per-class accuracy chart...\n');
-fig = figure('Position', [100, 100, 800, 500]);
+fig = figure('Position', [100, 100, 800, 500], 'Color', 'white');
 set(fig, 'ToolBar', 'none', 'MenuBar', 'none');
 bar(1:num_classes, class_accuracy * 100, 'FaceColor', [0.2, 0.4, 0.6]);
-xlabel('Class', 'FontSize', 12, 'FontWeight', 'bold');
-ylabel('Accuracy (%)', 'FontSize', 12, 'FontWeight', 'bold');
+xlabel('Class', 'FontSize', 12, 'FontWeight', 'bold', 'Color', 'black');
+ylabel('Accuracy (%)', 'FontSize', 12, 'FontWeight', 'bold', 'Color', 'black');
 xticks(1:num_classes);
 xticklabels(class_names);
 ylim([0, 100]);
@@ -257,7 +257,7 @@ grid on;
 % Add value labels on bars
 for c = 1:num_classes
     text(c, class_accuracy(c) * 100 + 2, sprintf('%.1f%%', class_accuracy(c) * 100), ...
-        'HorizontalAlignment', 'center', 'FontSize', 10);
+        'HorizontalAlignment', 'center', 'FontSize', 10, 'Color', 'black');
 end
 
 saveas(fig, fullfile(output_dir, 'per_class_accuracy.png'));
@@ -279,11 +279,11 @@ for c = 1:num_classes
         histogram_values = test_features(idx, :);
     end
 
-    fig = figure('Position', [100, 100, 900, 450]);
+    fig = figure('Position', [100, 100, 900, 450], 'Color', 'white');
     set(fig, 'ToolBar', 'none', 'MenuBar', 'none');
     bar(1:length(histogram_values), histogram_values, 'FaceColor', [0.3, 0.5, 0.7]);
-    xlabel('Visual Word Index', 'FontSize', 10);
-    ylabel('Frequency (Normalized)', 'FontSize', 10);
+    xlabel('Visual Word Index', 'FontSize', 10, 'Color', 'black');
+    ylabel('Frequency (Normalized)', 'FontSize', 10, 'Color', 'black');
     xlim([0, length(histogram_values) + 1]);
     grid on;
     saveas(fig, fullfile(output_dir, sprintf('bow_hist_%s.png', class_names{c})));
@@ -302,7 +302,7 @@ misclassified_idx = find(predictions ~= testLabels);
 num_examples = min(12, length(misclassified_idx));
 
 if num_examples > 0
-    fig = figure('Position', [100, 100, 1200, 800]);
+    fig = figure('Position', [100, 100, 1200, 800], 'Color', 'white');
     set(fig, 'ToolBar', 'none', 'MenuBar', 'none');
     for i = 1:num_examples
         idx = misclassified_idx(i);

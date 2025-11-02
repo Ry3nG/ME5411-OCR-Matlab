@@ -60,15 +60,15 @@ else
 end
 
 % Accuracy curve
-fig = figure('Position', [100, 100, 800, 500]);
+fig = figure('Position', [100, 100, 800, 500], 'Color', 'white');
 set(fig, 'ToolBar', 'none', 'MenuBar', 'none');
 plot(1:length(train_acc_history), train_acc_history * 100, 'b-', 'LineWidth', 2);
 hold on;
 plot(1:length(test_acc_history), test_acc_history * 100, 'r-', 'LineWidth', 2);
 grid on;
-xlabel('Epoch', 'FontSize', 12);
-ylabel('Accuracy (%)', 'FontSize', 12);
-legend('Training', 'Validation', 'Location', 'southeast');
+xlabel('Epoch', 'FontSize', 12, 'Color', 'black');
+ylabel('Accuracy (%)', 'FontSize', 12, 'Color', 'black');
+legend('Training', 'Validation', 'Location', 'southeast', 'TextColor', 'black');
 ylim([0, 100]);
 saveas(fig, fullfile(output_dir, 'accuracy_curve.png'));
 fprintf('   Saved: accuracy_curve.png\n');
@@ -89,7 +89,7 @@ end
 
 confusion_mat_norm = confusion_mat ./ sum(confusion_mat, 2);
 
-fig = figure('Position', [100, 100, 700, 600]);
+fig = figure('Position', [100, 100, 700, 600], 'Color', 'white');
 set(fig, 'ToolBar', 'none', 'MenuBar', 'none');
 imagesc(confusion_mat_norm);
 colormap(flipud(gray));
@@ -111,8 +111,8 @@ for i = 1:num_classes
     end
 end
 
-xlabel('Predicted Label', 'FontSize', 12);
-ylabel('True Label', 'FontSize', 12);
+xlabel('Predicted Label', 'FontSize', 12, 'Color', 'black');
+ylabel('True Label', 'FontSize', 12, 'Color', 'black');
 xticks(1:num_classes);
 yticks(1:num_classes);
 xticklabels(class_names);
@@ -151,7 +151,7 @@ for i = 1:length(misclassified_idx)
 end
 
 num_show = min(12, length(pairs));
-fig = figure('Position', [100, 100, 1200, 300 * ceil(num_show/4)]);
+fig = figure('Position', [100, 100, 1200, 300 * ceil(num_show/4)], 'Color', 'white');
 set(fig, 'ToolBar', 'none', 'MenuBar', 'none');
 
 for i = 1:num_show
@@ -159,7 +159,7 @@ for i = 1:num_show
     imshow(data_test(:, :, 1, pairs(i).idx), []);
     title(sprintf('%s \\rightarrow %s', ...
         class_names{pairs(i).true+1}, class_names{pairs(i).pred+1}), ...
-        'FontSize', 11, 'FontWeight', 'bold', 'Interpreter', 'tex');
+        'FontSize', 11, 'FontWeight', 'bold', 'Interpreter', 'tex', 'Color', 'black');
     axis off;
 end
 
@@ -198,7 +198,7 @@ for s = 1:length(samples)
     c5 = cnn.layers{4}.activations;
 
     % Input
-    fig = figure('Position', [100, 100, 200, 200]);
+    fig = figure('Position', [100, 100, 200, 200], 'Color', 'white');
     set(fig, 'ToolBar', 'none', 'MenuBar', 'none');
     imshow(img, []);
     axis off;
@@ -206,7 +206,7 @@ for s = 1:length(samples)
     close(fig);
 
     % C1: 2x2
-    fig = figure('Position', [100, 100, 400, 400]);
+    fig = figure('Position', [100, 100, 400, 400], 'Color', 'white');
     set(fig, 'ToolBar', 'none', 'MenuBar', 'none');
     for f = 1:4
         subplot(2, 2, f);
@@ -218,7 +218,7 @@ for s = 1:length(samples)
     close(fig);
 
     % C3: 2x4
-    fig = figure('Position', [100, 100, 800, 400]);
+    fig = figure('Position', [100, 100, 800, 400], 'Color', 'white');
     set(fig, 'ToolBar', 'none', 'MenuBar', 'none');
     for f = 1:8
         subplot(2, 4, f);
@@ -230,7 +230,7 @@ for s = 1:length(samples)
     close(fig);
 
     % C5: 4x4
-    fig = figure('Position', [100, 100, 600, 600]);
+    fig = figure('Position', [100, 100, 600, 600], 'Color', 'white');
     set(fig, 'ToolBar', 'none', 'MenuBar', 'none');
     for f = 1:16
         subplot(4, 4, f);
