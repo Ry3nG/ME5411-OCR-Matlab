@@ -12,32 +12,22 @@ if size(img, 3) == 3
     img = rgb2gray(img);
 end
 
-% Display and save original image
-figure('Name', 'Task 2: Original Image', 'Position', [100, 100, 800, 600]);
-imshow(img);
-title('Original Image');
+% Save original image
 imwrite(img, [outputDir, 'original.png']);
 
 % Define filter sizes to experiment with
 % 5x5 (required), 15x15 (medium), 31x31 (large)
 filterSizes = [5, 15, 31];
 
-% Apply averaging filters of different sizes
-filteredImages = cell(1, length(filterSizes));
-
+% Apply averaging filters of different sizes and save individual results
 for i = 1:length(filterSizes)
     filterSize = filterSizes(i);
     fprintf('Applying %dx%d averaging filter...\n', filterSize, filterSize);
 
     % Apply custom averaging filter
     filteredImg = myAverageFilter(img, filterSize);
-    filteredImages{i} = filteredImg;
 
-    % Display and save individual result
-    figure('Name', sprintf('Averaging Filter %dx%d', filterSize, filterSize), ...
-           'Position', [100, 100, 800, 600]);
-    imshow(filteredImg);
-    title(sprintf('Averaging Filter %d\\times%d', filterSize, filterSize));
+    % Save individual result
     imwrite(filteredImg, [outputDir, sprintf('average_filter_%dx%d.png', filterSize, filterSize)]);
 end
 

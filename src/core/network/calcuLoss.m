@@ -1,6 +1,4 @@
 % Calculate loss of the network. the loss calculation reflects to the activation of the last layer.
-% @Author: Kuankuan Sima
-% @Email: kuankuan_sima@u.nus.edu
 % Input:
 %   cnn: the cnn structure
 %   x: the input data

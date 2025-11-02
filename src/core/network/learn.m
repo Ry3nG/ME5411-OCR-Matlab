@@ -1,6 +1,4 @@
 % @Description: Learn the CNN model
-% @Author: Kuankuan Sima
-% @Email: kuankuan_sima@u.nus.edu
 % @Input:
 %   cnn: CNN model
 %   data: training data

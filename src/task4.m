@@ -18,10 +18,7 @@ if size(img, 3) == 3
     img = rgb2gray(img);
 end
 
-% Display original cropped image
-figure('Name', 'Task 4: Grayscale Input', 'Position', [100, 100, 900, 300]);
-imshow(img);
-title('Cropped Image (Grayscale)');
+% Save grayscale input image
 imwrite(img, [outputDir, 'grayscale_input.png']);
 
 % Calculate Otsu threshold
@@ -31,24 +28,8 @@ fprintf('Otsu threshold calculated: %.4f\n', threshold);
 % Apply binarization using Otsu threshold
 binaryImg = myImbinarize(img, threshold);
 
-% Display binary image
-figure('Name', 'Task 4: Binary Image (Otsu)', 'Position', [100, 100, 900, 300]);
-imshow(binaryImg);
-title(sprintf('Binary Image (Otsu threshold = %.4f)', threshold));
+% Save binary image
 imwrite(binaryImg, [outputDir, 'binary_otsu.png']);
-
-% Create comparison figure
-figure('Name', 'Task 4: Comparison', 'Position', [100, 100, 1600, 400]);
-
-subplot(1, 2, 1);
-imshow(img);
-title('Grayscale Image');
-
-subplot(1, 2, 2);
-imshow(binaryImg);
-title(sprintf('Binary Image (Otsu \\theta=%.3f)', threshold));
-
-saveas(gcf, [outputDir, 'comparison.png']);
 
 fprintf('\nTask 4 completed successfully!\n');
 fprintf('Binary image saved to: %s\n', outputDir);

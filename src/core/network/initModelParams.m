@@ -1,6 +1,4 @@
 % @Description: Initialize weights of CNN according to the structure definition
-% @Author: Kuankuan Sima
-% @Email: kuankuan_sima@u.nus.edu
 function cnn = initModelParams(cnn, X, numClasses)
 
     % initModelParams: Initialize weights of CNN

@@ -1,6 +1,4 @@
 % @Description: Compute gradient of CNN
-% @Author: Kuankuan Sima
-% @Email: kuankuan_sima@u.nus.edu
 % @Input:
 %   cnn: CNN model
 %   X: Input data

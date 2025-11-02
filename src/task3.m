@@ -17,10 +17,7 @@ if size(img, 3) == 3
     img = rgb2gray(img);
 end
 
-% Display original image
-figure('Name', 'Task 3: Original Image', 'Position', [100, 100, 800, 600]);
-imshow(img);
-title('Original Image');
+% Save original image
 imwrite(img, [outputDir, 'original.png']);
 
 % Define cropping rectangle for HD44780A00 line
@@ -32,15 +29,12 @@ rect = [50, 200, 900, 150];
 % Crop the image using custom function
 croppedImg = myImcrop(img, rect);
 
-% Display cropped image
-figure('Name', 'Task 3: Cropped Image (HD44780A00)', 'Position', [100, 100, 800, 300]);
-imshow(croppedImg);
-title('Cropped Sub-image: HD44780A00');
+% Save cropped image
 imwrite(croppedImg, [outputDir, 'cropped_HD44780A00.png']);
 
-% Create a comparison figure showing the crop region on original
-% Save without title and white borders
-figure('Name', 'Task 3: Crop Region Visualization', 'Position', [100, 100, 990, 367]);
+% Create visualization showing the crop region on original
+% Save without white borders
+figure('Name', 'Task 3: Crop Region Visualization', 'Position', [100, 100, 990, 367], 'Color', 'white');
 imshow(img);
 hold on;
 rectangle('Position', rect, 'EdgeColor', 'r', 'LineWidth', 2);

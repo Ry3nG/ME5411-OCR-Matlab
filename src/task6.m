@@ -114,7 +114,7 @@ for i = 1:length(segmented_chars)
 end
 
 %% Step 7: Visualize segmentation with bounding boxes
-figure('Name', 'Character Segmentation', 'Position', [100, 100, 900, 300]);
+figure('Name', 'Character Segmentation', 'Position', [100, 100, 900, 300], 'Color', 'white');
 imshow(binaryImg);
 hold on;
 
@@ -128,24 +128,12 @@ for i = 1:size(char_bboxes, 1)
         'Color', 'r', 'FontSize', 12, 'FontWeight', 'bold');
 end
 hold off;
-title(sprintf('Character Segmentation (%d characters)', length(segmented_chars)));
 
 % Save visualization
 set(gca, 'Position', [0 0 1 1]);
 set(gcf, 'PaperPositionMode', 'auto');
 print([outputDir, 'segmentation_result.png'], '-dpng', '-r150');
-
-%% Step 8: Create montage of all characters
-figure('Name', 'Segmented Characters', 'Position', [100, 100, 1200, 200]);
-
-num_chars = length(segmented_chars);
-for i = 1:num_chars
-    subplot(1, num_chars, i);
-    imshow(segmented_chars{i});
-    title(sprintf('Char %d', i));
-end
-
-saveas(gcf, [outputDir, 'characters_montage.png']);
+close(gcf);
 
 fprintf('\nTask 6 completed successfully!\n');
 fprintf('Segmented %d characters\n', length(segmented_chars));

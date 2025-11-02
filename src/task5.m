@@ -59,53 +59,36 @@ cannyEdges = myCanny(double(cleanBinary), 0.3, 0.6, 0.8);
 
 %% Save individual results
 % Save binary input
-figure('Name', 'Binary Input', 'Position', [100, 100, 900, 300]);
+figure('Name', 'Binary Input', 'Position', [100, 100, 900, 300], 'Color', 'white');
 imshow(binaryImg);
 set(gca, 'Position', [0 0 1 1]);
 set(gcf, 'PaperPositionMode', 'auto');
 print([outputDir, 'binary_input.png'], '-dpng', '-r150');
+close(gcf);
 
 % Save morphological edges
-figure('Name', 'Morphological Boundary', 'Position', [100, 100, 900, 300]);
+figure('Name', 'Morphological Boundary', 'Position', [100, 100, 900, 300], 'Color', 'white');
 imshow(morphEdges);
 set(gca, 'Position', [0 0 1 1]);
 set(gcf, 'PaperPositionMode', 'auto');
 print([outputDir, 'morphological_boundary.png'], '-dpng', '-r150');
+close(gcf);
 
 % Save Sobel edges
-figure('Name', 'Sobel Edges', 'Position', [100, 100, 900, 300]);
+figure('Name', 'Sobel Edges', 'Position', [100, 100, 900, 300], 'Color', 'white');
 imshow(sobelEdges);
 set(gca, 'Position', [0 0 1 1]);
 set(gcf, 'PaperPositionMode', 'auto');
 print([outputDir, 'sobel_edges.png'], '-dpng', '-r150');
+close(gcf);
 
 % Save Canny edges
-figure('Name', 'Canny Edges', 'Position', [100, 100, 900, 300]);
+figure('Name', 'Canny Edges', 'Position', [100, 100, 900, 300], 'Color', 'white');
 imshow(cannyEdges);
 set(gca, 'Position', [0 0 1 1]);
 set(gcf, 'PaperPositionMode', 'auto');
 print([outputDir, 'canny_edges.png'], '-dpng', '-r150');
-
-%% Create comparison figure
-figure('Name', 'Task 5: Edge Detection Comparison', 'Position', [100, 100, 2400, 400]);
-
-subplot(1, 4, 1);
-imshow(binaryImg);
-title('Binary Image (Input)');
-
-subplot(1, 4, 2);
-imshow(morphEdges);
-title('Morphological Boundary');
-
-subplot(1, 4, 3);
-imshow(sobelEdges);
-title('Sobel Edges');
-
-subplot(1, 4, 4);
-imshow(cannyEdges);
-title('Canny Edges');
-
-saveas(gcf, [outputDir, 'comparison.png']);
+close(gcf);
 
 fprintf('\nTask 5 completed successfully!\n');
 fprintf('Edge detection results saved to: %s\n', outputDir);

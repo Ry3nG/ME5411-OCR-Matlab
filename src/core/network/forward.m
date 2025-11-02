@@ -1,6 +1,4 @@
 % Description: Forward pass of model
-% @Author: Kuankuan Sima
-% @Email: kuankuan_sima@u.nus.edu
 % Input:
 %   cnn: model
 %   X: input data

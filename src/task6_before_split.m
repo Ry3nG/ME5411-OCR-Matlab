@@ -39,7 +39,7 @@ end
 sorted_bboxes = bboxes(sort_idx, :);
 
 % Visualize WITHOUT splitting (to show the problem)
-figure('Name', 'Before Width-Based Splitting', 'Position', [100, 100, 900, 300]);
+figure('Name', 'Before Width-Based Splitting', 'Position', [100, 100, 900, 300], 'Color', 'white');
 imshow(binaryImg);
 hold on;
 
@@ -51,7 +51,6 @@ for i = 1:size(sorted_bboxes, 1)
         'Color', 'r', 'FontSize', 12, 'FontWeight', 'bold');
 end
 hold off;
-title(sprintf('Before Width-Based Splitting (%d components - merged characters visible)', size(sorted_bboxes, 1)));
 
 % Save visualization
 set(gca, 'Position', [0 0 1 1]);
