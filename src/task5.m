@@ -53,8 +53,9 @@ fprintf('Applying Sobel edge detection...\n');
 
 %% Method 3: Canny Edge Detection
 fprintf('Applying Canny edge detection...\n');
-% Apply to cleaned binary image for fair comparison
-cannyEdges = myCanny(double(cleanBinary), 0.1, 0.3, 1.0);
+% Apply to cleaned binary image with higher thresholds for cleaner edges
+% Parameters: lowThreshold=0.3, highThreshold=0.6, sigma=0.8
+cannyEdges = myCanny(double(cleanBinary), 0.3, 0.6, 0.8);
 
 %% Save individual results
 % Save binary input
