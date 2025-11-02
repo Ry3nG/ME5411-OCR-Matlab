@@ -14,7 +14,9 @@ addpath('utils');
 % Create timestamp for logging
 date_prefix = string(datetime('now', 'Format', 'MM-dd_HH-mm-ss'));
 log_path = "../output/task7_1/" + date_prefix + "/";
-mkdir(log_path);
+if ~exist(log_path, 'dir')
+    mkdir(log_path);
+end
 
 fprintf('=== Task 7.1: CNN Character Classification ===\n');
 fprintf('Log directory: %s\n\n', log_path);
@@ -51,6 +53,12 @@ fprintf('Dataset loaded:\n');
 fprintf('  Training samples: %d\n', size(data_train, 4));
 fprintf('  Test samples: %d\n\n', size(data_test, 4));
 
+% Convert labels from 0-indexed to 1-indexed for MATLAB
+% Dataset uses 0-6, but MATLAB sparse() requires 1-7
+labels_train = labels_train + 1;
+labels_test = labels_test + 1;
+fprintf('Labels converted to 1-indexed (1-7) for training\n\n');
+
 %% Define CNN Architecture
 % Architecture: 124x124 -> Conv1 -> Pool1 -> Conv2 -> Pool2 -> Conv3 -> Pool3 -> FC1 -> FC2 -> Output
 % 124x124 -> (conv 5x5, 4 filters) -> 120x120x4 -> (pool 4x4) -> 30x30x4
@@ -78,7 +86,7 @@ fprintf('  FC2: 100 -> 50, ReLU\n');
 fprintf('  Output: 50 -> 7, Softmax\n\n');
 
 %% Training Hyperparameters
-options.epochs = 60;
+options.epochs = 30;
 options.minibatch = 128;
 options.lr_max = 0.1;
 options.lr = options.lr_max;
@@ -121,15 +129,20 @@ fprintf('Training completed in %.2f seconds (%.2f minutes)\n\n', training_time, 
 %% Evaluate on Test Set
 fprintf('Evaluating on test set...\n');
 [preds, ~] = predict(cnn, data_test);
-test_acc = sum(preds == labels_test) / length(preds);
+
+% Convert predictions and labels back to 0-indexed for evaluation
+preds = preds - 1;
+labels_test_eval = labels_test - 1;
+
+test_acc = sum(preds == labels_test_eval) / length(preds);
 fprintf('Final test accuracy: %.4f (%.2f%%)\n\n', test_acc, test_acc * 100);
 
 % Per-class accuracy
 class_names = {'0', '4', '7', '8', 'A', 'D', 'H'};
 fprintf('Per-class accuracy:\n');
 for i = 0:numClasses-1
-    idx = (labels_test == i);
-    class_acc = sum(preds(idx) == labels_test(idx)) / sum(idx);
+    idx = (labels_test_eval == i);
+    class_acc = sum(preds(idx) == labels_test_eval(idx)) / sum(idx);
     fprintf('  Class %s: %.4f (%.2f%%) [%d samples]\n', ...
         class_names{i+1}, class_acc, class_acc*100, sum(idx));
 end
@@ -139,7 +152,7 @@ fprintf('\nSaving results to: %s\n', log_path);
 
 % Save model
 save(log_path + "cnn.mat", 'cnn');
-save(log_path + "predictions.mat", 'preds', 'labels_test');
+save(log_path + "predictions.mat", 'preds', 'labels_test_eval');
 save(log_path + "hyper_params.mat", 'options', 'dataset_option');
 
 % Save text results
@@ -149,8 +162,8 @@ fprintf(fileID, '========================================\n\n');
 fprintf(fileID, 'Final test accuracy: %.4f (%.2f%%)\n\n', test_acc, test_acc * 100);
 fprintf(fileID, 'Per-class accuracy:\n');
 for i = 0:numClasses-1
-    idx = (labels_test == i);
-    class_acc = sum(preds(idx) == labels_test(idx)) / sum(idx);
+    idx = (labels_test_eval == i);
+    class_acc = sum(preds(idx) == labels_test_eval(idx)) / sum(idx);
     fprintf(fileID, '  Class %s: %.4f (%.2f%%) [%d samples]\n', ...
         class_names{i+1}, class_acc, class_acc*100, sum(idx));
 end
