@@ -1,9 +1,21 @@
 % Regenerate dataset with correct 0-indexed labels
 clear; close all;
 
-addpath('utils');
+% Resolve directories
+script_dir = fileparts(mfilename('fullpath'));
+src_dir = fileparts(script_dir);
+project_root = fileparts(src_dir);
 
-data_path = "../data/";
+% Preserve caller working directory
+orig_dir = pwd;
+cleanup = onCleanup(@() cd(orig_dir));
+
+% Operate from src so legacy relative paths in utilities remain valid
+cd(src_dir);
+addpath(fullfile(src_dir, 'utils'));
+
+data_path = "../data/";  % Relative to src directory (expected by loadDataset)
+
 dataset_option.load_raw = true;
 dataset_option.shuffle = true;
 dataset_option.img_dim = 124;
