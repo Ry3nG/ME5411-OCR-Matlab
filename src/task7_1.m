@@ -60,30 +60,28 @@ labels_test = labels_test + 1;
 fprintf('Labels converted to 1-indexed (1-7) for training\n\n');
 
 %% Define CNN Architecture
-% Architecture: 124x124 -> Conv1 -> Pool1 -> Conv2 -> Pool2 -> Conv3 -> Pool3 -> FC1 -> FC2 -> Output
-% 124x124 -> (conv 5x5, 4 filters) -> 120x120x4 -> (pool 4x4) -> 30x30x4
-%         -> (conv 5x5, 8 filters) -> 26x26x8 -> (pool 2x2) -> 13x13x8
-%         -> (conv 5x5, 16 filters) -> 9x9x16 -> (pool 3x3) -> 3x3x16 = 144
-%         -> FC(100) -> FC(50) -> Softmax(7)
+% Improved Architecture: 124x124 -> Conv1 -> Pool1 -> Conv2 -> Pool2 -> Conv3 -> Pool3 -> FC1 -> Output
+% 124x124 -> (conv 5x5, 16 filters) -> 120x120x16 -> (pool 2x2) -> 60x60x16
+%         -> (conv 5x5, 32 filters) -> 56x56x32 -> (pool 2x2) -> 28x28x32
+%         -> (conv 5x5, 64 filters) -> 24x24x64 -> (pool 2x2) -> 12x12x64 = 9216
+%         -> FC(128) -> Softmax(7)
 
 cnn.layers = {
     struct('type', 'input')  % Input layer: 124x124x1
-    struct('type', 'Conv2D', 'filterDim', 5, 'numFilters', 4, 'poolDim', 4, 'actiFunc', 'relu')
-    struct('type', 'Conv2D', 'filterDim', 5, 'numFilters', 8, 'poolDim', 2, 'actiFunc', 'relu')
-    struct('type', 'Conv2D', 'filterDim', 5, 'numFilters', 16, 'poolDim', 3, 'actiFunc', 'relu')
-    struct('type', 'Linear', 'hiddenUnits', 100, 'actiFunc', 'relu', 'dropout', 0.2)
-    struct('type', 'Linear', 'hiddenUnits', 50, 'actiFunc', 'relu')
+    struct('type', 'Conv2D', 'filterDim', 5, 'numFilters', 16, 'poolDim', 2, 'actiFunc', 'relu')
+    struct('type', 'Conv2D', 'filterDim', 5, 'numFilters', 32, 'poolDim', 2, 'actiFunc', 'relu')
+    struct('type', 'Conv2D', 'filterDim', 5, 'numFilters', 64, 'poolDim', 2, 'actiFunc', 'relu')
+    struct('type', 'Linear', 'hiddenUnits', 128, 'actiFunc', 'relu', 'dropout', 0.3)
     struct('type', 'output', 'softmax', 1)
 };
 
-fprintf('CNN Architecture:\n');
+fprintf('Improved CNN Architecture:\n');
 fprintf('  Input: 124x124x1\n');
-fprintf('  Conv1: 5x5x4, ReLU, MaxPool 4x4 -> 30x30x4\n');
-fprintf('  Conv2: 5x5x8, ReLU, MaxPool 2x2 -> 13x13x8\n');
-fprintf('  Conv3: 5x5x16, ReLU, MaxPool 3x3 -> 3x3x16\n');
-fprintf('  FC1: 144 -> 100, ReLU, Dropout(0.2)\n');
-fprintf('  FC2: 100 -> 50, ReLU\n');
-fprintf('  Output: 50 -> 7, Softmax\n\n');
+fprintf('  Conv1: 5x5x16, ReLU, MaxPool 2x2 -> 60x60x16\n');
+fprintf('  Conv2: 5x5x32, ReLU, MaxPool 2x2 -> 28x28x32\n');
+fprintf('  Conv3: 5x5x64, ReLU, MaxPool 2x2 -> 12x12x64\n');
+fprintf('  FC1: 9216 -> 128, ReLU, Dropout(0.3)\n');
+fprintf('  Output: 128 -> 7, Softmax\n\n');
 
 %% Training Hyperparameters
 options.epochs = 30;
@@ -109,7 +107,7 @@ fprintf('  Batch size: %d\n', options.minibatch);
 fprintf('  Learning rate: %.4f (max) -> %.1e (min)\n', options.lr_max, options.lr_min);
 fprintf('  LR schedule: %s\n', options.lr_method);
 fprintf('  Momentum: %.2f\n', options.momentum);
-fprintf('  Dropout: 0.2 (FC1)\n');
+fprintf('  Dropout: 0.3 (FC1)\n');
 fprintf('  Total iterations: %d\n\n', total_iter);
 
 %% Initialize and Train CNN
