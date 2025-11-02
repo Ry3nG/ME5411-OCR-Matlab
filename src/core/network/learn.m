@@ -36,7 +36,6 @@ function [cnn_final] = learn(cnn, data_train, labels_train, data_test, labels_te
     %  momentum    - momentum constant, defualts to 0.9
 
     %% Setup
-    addpath("utils");
     theta = unrollWeights(cnn);
     assert(all(isfield(options, {'epochs', 'lr', 'minibatch'})), 'Some options not defined');
 

@@ -6,24 +6,29 @@
 clear all; %#ok<CLALL>
 close all;
 
+% Get the project root directory
+script_dir = fileparts(mfilename('fullpath'));
+project_root = fileparts(script_dir);
+cd(project_root);
+
 % Add paths
-addpath('core/network');
-addpath('core/image_process');
-addpath('utils');
+addpath(genpath('src/core'));
+addpath(genpath('src/utils'));
 
 % Create timestamp for logging
 date_prefix = string(datetime('now', 'Format', 'MM-dd_HH-mm-ss'));
-log_path = "../output/task7_1/" + date_prefix + "/";
+log_path = fullfile('output', 'task7_1', date_prefix);
 if ~exist(log_path, 'dir')
     mkdir(log_path);
 end
+log_path = log_path + "/";
 
 fprintf('=== Task 7.1: CNN Character Classification ===\n');
 fprintf('Log directory: %s\n\n', log_path);
 
 %% Dataset Configuration
-load_from_file = false;  % Set to true after first run to speed up
-data_path = "../data/";
+load_from_file = true;  % Set to true after first run to speed up
+data_path = "data/";
 
 dataset_option.load_raw = true;
 dataset_option.shuffle = true;
@@ -45,8 +50,8 @@ if ~load_from_file
     [data_train, labels_train, data_test, labels_test] = loadDataset(data_path, dataset_option);
 else
     fprintf('Loading from saved files...\n');
-    load("../data/train.mat");
-    load("../data/test.mat");
+    load('data/train.mat');
+    load('data/test.mat');
 end
 
 fprintf('Dataset loaded:\n');
