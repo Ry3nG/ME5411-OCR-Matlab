@@ -1,11 +1,16 @@
 clear; close all; clc;
 
-addpath(genpath('core'));
-addpath(genpath('utils'));
+% Get the project root directory
+script_dir = fileparts(mfilename('fullpath'));
+project_root = fileparts(script_dir);
+cd(project_root);
+
+addpath(genpath('src/core'));
+addpath(genpath('src/utils'));
 
 % Input and output directories
-binaryImgPath = '../output/task4/binary_otsu.png';
-outputDir = '../output/task6/';
+binaryImgPath = 'output/task4/binary_otsu.png';
+outputDir = 'output/task6/';
 charactersDir = [outputDir, 'characters/'];
 
 % Create output directories

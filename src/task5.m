@@ -1,12 +1,17 @@
 clear; close all; clc;
 
-addpath(genpath('core'));
-addpath(genpath('utils'));
+% Get the project root directory
+script_dir = fileparts(mfilename('fullpath'));
+project_root = fileparts(script_dir);
+cd(project_root);
+
+addpath(genpath('src/core'));
+addpath(genpath('src/utils'));
 
 % Input and output directories
-binaryImgPath = '../output/task4/binary_otsu.png';
-grayscaleImgPath = '../output/task4/grayscale_input.png';
-outputDir = '../output/task5/';
+binaryImgPath = 'output/task4/binary_otsu.png';
+grayscaleImgPath = 'output/task4/grayscale_input.png';
+outputDir = 'output/task5/';
 
 % Create output directory if it doesn't exist
 if ~exist(outputDir, 'dir')

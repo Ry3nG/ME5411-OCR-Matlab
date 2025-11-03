@@ -1,10 +1,15 @@
 clear; close all; clc;
 
-addpath(genpath('core'));
-addpath(genpath('utils'));
+% Get the project root directory
+script_dir = fileparts(mfilename('fullpath'));
+project_root = fileparts(script_dir);
+cd(project_root);
 
-imgPath = '../canvas/charact2.bmp';
-outputDir = '../output/task2/';
+addpath(genpath('src/core'));
+addpath(genpath('src/utils'));
+
+imgPath = 'canvas/charact2.bmp';
+outputDir = 'output/task2/';
 
 % Read and convert image to grayscale if needed
 img = imread(imgPath);
