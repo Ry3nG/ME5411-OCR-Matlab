@@ -44,7 +44,8 @@ function plot_som_umatrix(som, outpath)
     colormap(parula);
     cb = colorbar;
     set(cb, 'Color', 'k');
-    title('SOM U-Matrix (Unified Distance)', 'FontSize', 12, 'FontWeight', 'bold');
+    set(gca, 'Color', 'white', 'XColor', 'black', 'YColor', 'black');
+    title('SOM U-Matrix (Unified Distance)', 'FontSize', 12, 'FontWeight', 'bold', 'Color', 'black');
 
     if nargin > 1
         saveas(gcf, outpath);

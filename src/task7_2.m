@@ -193,17 +193,23 @@ conf_matrix_norm = conf_matrix ./ sum(conf_matrix, 2);
 fig = figure('Position', [100, 100, 900, 800], 'Color', 'white');
 set(fig, 'ToolBar', 'none', 'MenuBar', 'none');
 imagesc(conf_matrix_norm);
-colormap(flipud(gray));
-colorbar;
+colormap(flipud(gray));  % High values = dark, low values = light
+cb = colorbar;
 caxis([0, 1]);
-set(gca, 'Color', 'white');
+set(gca, 'Color', 'white', 'XColor', 'black', 'YColor', 'black');
 for i = 1:num_classes
     for j = 1:num_classes
         count = conf_matrix(i, j);
         percentage = conf_matrix_norm(i, j) * 100;
+        % Use white text for dark cells (high values), black for light cells
+        if conf_matrix_norm(i, j) > 0.5
+            text_color = 'white';
+        else
+            text_color = 'black';
+        end
         text(j, i, sprintf('%d\n(%.1f%%)', count, percentage), ...
             'HorizontalAlignment', 'center', 'VerticalAlignment', 'middle', ...
-            'Color', 'black', 'FontSize', 11);
+            'Color', text_color, 'FontSize', 11);
     end
 end
 xlabel('Predicted Class', 'FontSize', 12, 'FontWeight', 'bold', 'Color', 'black');

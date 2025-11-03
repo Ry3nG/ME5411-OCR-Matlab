@@ -27,10 +27,10 @@ function model = trainLinearSVM(X, y, C, varargin)
     verbose = p.Results.verbose;
 
     [N, D] = size(X);
+    X = [X, ones(N, 1)];      % Feature augmentation to absorb bias
 
     % Initialize parameters
-    w = randn(D, 1) * 0.01;  % Small random initialization
-    b = 0;
+    w = randn(D + 1, 1) * 0.01;  % Small random initialization
 
     % Regularization weight
     lambda = 1 / (C * N);  % Regularization strength
@@ -47,14 +47,12 @@ function model = trainLinearSVM(X, y, C, varargin)
             yi = y(idx);
 
             % Compute margin
-            decision = w' * xi + b;
-            margin = yi * decision;
+            margin = yi * (w' * xi);
 
             % Subgradient update
             if margin < 1
                 % Misclassified or within margin: update both w and b
                 w = w - lr * (lambda * w - yi * xi);
-                b = b + lr * yi;
             else
                 % Correctly classified outside margin: only regularize w
                 w = w - lr * lambda * w;
@@ -64,7 +62,7 @@ function model = trainLinearSVM(X, y, C, varargin)
         % Progress display
         if verbose && mod(epoch, max_epochs/10) == 0
             % Compute training accuracy
-            pred = sign(X * w + b);
+            pred = sign(X * w);
             pred(pred == 0) = 1;  % Handle zero predictions
             acc = sum(pred == y) / N;
             fprintf('    Epoch %d/%d, Acc: %.2f%%\n', epoch, max_epochs, acc*100);
@@ -72,6 +70,6 @@ function model = trainLinearSVM(X, y, C, varargin)
     end
 
     % Package model
-    model.w = w;
-    model.b = b;
+    model.w = w(1:end-1);
+    model.b = w(end);
 end

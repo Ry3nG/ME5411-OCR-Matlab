@@ -39,13 +39,14 @@ function hit_stats = plot_som_hits(patches, som, outpath)
     vis_grid = log1p(hit_grid);  % Compress dynamic range for visibility
     imagesc(vis_grid);
     axis image off;
-    colormap(hot);
+    colormap(flipud(hot));  % Changed from hot to flipud(hot) for white-to-red (light background)
     cb = colorbar;
     set(cb, 'Color', 'k');
+    set(gca, 'Color', 'white', 'XColor', 'black', 'YColor', 'black');
     ticks = get(cb, 'Ticks');
     set(cb, 'TickLabels', arrayfun(@(t) sprintf('%.0f', exp(t) - 1), ticks, 'UniformOutput', false));
     ylabel(cb, 'Patch Count', 'Color', 'k');
-    title('SOM Hit Map', 'FontSize', 12, 'FontWeight', 'bold');
+    title('SOM Hit Map', 'FontSize', 12, 'FontWeight', 'bold', 'Color', 'black');
 
     if nargin > 2 && ~isempty(outpath)
         [save_dir, save_name, ~] = fileparts(outpath);
