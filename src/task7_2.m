@@ -1,174 +1,160 @@
-%% Task 7.2: Non-CNN Character Classification using SOM + Bag-of-Visual-Words + SVM
+%% Task 7.2 Final: SOM (Batch) + BoW + SVM with Enhanced Visualizations
 % ME5411 OCR Project
-% Method: Self-Organizing Maps for visual codebook learning,
-%         Bag-of-Visual-Words for feature encoding,
-%         Support Vector Machines for classification
 %
-% This approach uses only methods covered in Part 2 of the course:
-% - SOM: Unsupervised learning for prototype discovery
-% - SVM: Supervised classification
+% Improvements:
+% 1. Mini-batch SOM training (faster, maintains accuracy)
+% 2. Enhanced visualizations (U-Matrix, Hit Map, Margins, etc.)
+% 3. Code organization and documentation
+%
+% Theory: All methods from Part-II lectures (non-CNN)
 
 clear; clc; close all;
+rng(0, 'twister');
 
-%% Get the project root directory
+%% Setup
 script_dir = fileparts(mfilename('fullpath'));
 project_root = fileparts(script_dir);
 cd(project_root);
 
-%% Setup paths
 addpath(genpath('src/core'));
+addpath(genpath('src/viz'));
 output_dir = 'output/task7_2';
 if ~exist(output_dir, 'dir')
     mkdir(output_dir);
 end
 
-%% Load preprocessed data
 fprintf('=== Task 7.2: SOM + BoW + SVM Classification ===\n\n');
+
+%% Configuration
+cfg = struct();
+cfg.patch_size = 8;
+cfg.num_patch_samples = 100000;
+cfg.som_grid = [10, 10];
+cfg.som_iterations = 50000;
+cfg.som_lr_init = 0.5;
+cfg.som_lr_final = 0.01;
+cfg.som_sigma_init = max(cfg.som_grid) / 2;
+cfg.som_sigma_final = 0.5;
+cfg.som_batch = 32;
+cfg.stride = 4;
+cfg.soft_voting = true;
+cfg.sigma_bow = 0.75;
+cfg.spatial_pyramid = true;
+cfg.C = 1.0;
+cfg.svm_epochs = 200;
+cfg.svm_lr = 0.01;
+cfg.use_pca = true;
+cfg.pca_var = 0.95;
+cfg.plot_per_class_accuracy = false;
+cfg.min_patch_std = 0.001;
+
+fprintf('Configuration:\n');
+disp(cfg);
+fprintf('\n');
+
+%% Load Data
 fprintf('Loading data...\n');
 load('data/train.mat', 'data_train', 'labels_train');
 load('data/test.mat', 'data_test', 'labels_test');
 
-% Rename for consistency
-trainData = data_train;
-trainLabels = labels_train + 1;  % Convert from 0-6 to 1-7
-testData = data_test;
-testLabels = labels_test + 1;    % Convert from 0-6 to 1-7
-clear data_train labels_train data_test labels_test;
+Xtr = data_train;
+Ytr = labels_train + 1;
+Xte = data_test;
+Yte = labels_test + 1;
 
-% Get dimensions
-[H, W, ~, N_train] = size(trainData);
-N_test = size(testData, 4);
+[H, W, ~, N_train] = size(Xtr);
+N_test = size(Xte, 4);
 num_classes = 7;
-
-% Class names (mapping from 1-7 to actual characters)
 class_names = {'0', '4', '7', '8', 'A', 'D', 'H'};
 
-fprintf('Training samples: %d\n', N_train);
-fprintf('Test samples: %d\n', N_test);
-fprintf('Image size: %dx%d\n', H, W);
-fprintf('Number of classes: %d\n', num_classes);
-fprintf('Class names: %s\n\n', strjoin(class_names, ', '));
+fprintf('Training: %d samples, Test: %d samples\n', N_train, N_test);
+fprintf('Image size: %dx%d, Classes: %d\n\n', H, W, num_classes);
 
-%% Hyperparameters
-% Patch extraction
-patch_size = 8;           % 8x8 patches
-num_patch_samples = 100000; % Number of patches for SOM training
-
-% SOM configuration
-som_grid_size = [10, 10];   % 10x10 grid = 100 visual words
-som_iterations = 25000;     % Training iterations
-som_lr_init = 0.5;
-som_lr_final = 0.01;
-
-% Feature extraction
-stride = 4;               % 50% overlap for dense sampling
-norm_type = 'l2';         % L2 normalization for BoW histograms
-soft_voting = true;       % Use soft voting with SOM neighborhood
-sigma_bow = 0.75;         % Neighborhood sigma for soft voting
-spatial_pyramid = true;   % Use 1x1 + 2x2 spatial pyramid
-
-% SVM configuration
-C = 1.0;                  % Regularization parameter (higher = less regularization)
-svm_max_epochs = 200;     % Number of epochs
-svm_lr = 0.1;             % Learning rate
-
-fprintf('=== Hyperparameters ===\n');
-fprintf('Patch size: %dx%d\n', patch_size, patch_size);
-fprintf('Number of patches for SOM: %d\n', num_patch_samples);
-fprintf('SOM grid: %dx%d (%d neurons)\n', som_grid_size(1), som_grid_size(2), prod(som_grid_size));
-fprintf('SOM iterations: %d\n', som_iterations);
-fprintf('Feature extraction stride: %d\n', stride);
-fprintf('Histogram normalization: %s\n', norm_type);
-fprintf('Soft voting: %s (sigma=%.2f)\n', string(soft_voting), sigma_bow);
-fprintf('Spatial pyramid: %s\n', string(spatial_pyramid));
-fprintf('SVM C parameter: %.2f\n\n', C);
-
-%% Stage 1: Extract patches for SOM training
+%% Stage 1: Extract Patches
 fprintf('=== Stage 1: Patch Extraction ===\n');
 tic;
-patches = extract_patches(trainData, trainLabels, patch_size, num_patch_samples, ...
-    'normalize', true, 'verbose', true);
+patches = extract_patches(Xtr, Ytr, cfg.patch_size, cfg.num_patch_samples, ...
+    'normalize', true, 'verbose', true, 'min_patch_std', cfg.min_patch_std);
 t_patches = toc;
-fprintf('Patch extraction time: %.2f seconds\n\n', t_patches);
+fprintf('Time: %.2f seconds\n\n', t_patches);
 
-%% Stage 2: Train SOM for visual codebook
-fprintf('=== Stage 2: SOM Training ===\n');
+%% Stage 2: Train SOM (Mini-batch)
+fprintf('=== Stage 2: SOM Training (Mini-batch) ===\n');
 tic;
-som_model = train_som(patches, som_grid_size, som_iterations, ...
-    'lr_init', som_lr_init, ...
-    'lr_final', som_lr_final, ...
-    'verbose', true);
+som = train_som_batch(patches, cfg.som_grid, cfg.som_iterations, ...
+    'lr_init', cfg.som_lr_init, 'lr_final', cfg.som_lr_final, ...
+    'sigma_init', cfg.som_sigma_init, 'sigma_final', cfg.som_sigma_final, ...
+    'batch', cfg.som_batch, 'verbose', true);
 t_som = toc;
-fprintf('SOM training time: %.2f seconds\n\n', t_som);
+fprintf('Time: %.2f seconds\n\n', t_som);
 
-% Save SOM model
-save(fullfile(output_dir, 'som_model.mat'), 'som_model');
+save(fullfile(output_dir, 'som_model.mat'), 'som');
 
-%% Stage 3: Extract BoW features from training data
-fprintf('=== Stage 3: Training Feature Extraction ===\n');
+%% Stage 3: Extract BoW Features
+fprintf('=== Stage 3: BoW Feature Extraction ===\n');
+fprintf('Extracting training features...\n');
 tic;
-train_features = extract_bow_features(trainData, som_model, stride, ...
-    'normalize', true, ...
-    'norm_type', norm_type, ...
-    'soft_voting', soft_voting, ...
-    'sigma_bow', sigma_bow, ...
-    'spatial_pyramid', spatial_pyramid, ...
-    'verbose', true);
-t_train_features = toc;
-fprintf('Training feature extraction time: %.2f seconds\n\n', t_train_features);
+Ftr = extract_bow_features(Xtr, som, cfg.stride, ...
+    'normalize', true, 'norm_type', 'l2', ...
+    'soft_voting', cfg.soft_voting, 'sigma_bow', cfg.sigma_bow, ...
+    'spatial_pyramid', cfg.spatial_pyramid, 'verbose', true, ...
+    'min_patch_std', cfg.min_patch_std);
+t_train_feat = toc;
 
-%% Stage 4: Train multi-class SVM
-fprintf('=== Stage 4: SVM Training ===\n');
+fprintf('Extracting test features...\n');
 tic;
-svm_models = trainMulticlassSVM(train_features, trainLabels, num_classes, C, ...
-    'max_epochs', svm_max_epochs, ...
-    'lr', svm_lr, ...
-    'verbose', true);
-t_svm = toc;
-fprintf('SVM training time: %.2f seconds\n\n', t_svm);
+Fte = extract_bow_features(Xte, som, cfg.stride, ...
+    'normalize', true, 'norm_type', 'l2', ...
+    'soft_voting', cfg.soft_voting, 'sigma_bow', cfg.sigma_bow, ...
+    'spatial_pyramid', cfg.spatial_pyramid, 'verbose', true, ...
+    'min_patch_std', cfg.min_patch_std);
+t_test_feat = toc;
 
-% Save SVM models
-save(fullfile(output_dir, 'svm_models.mat'), 'svm_models');
+fprintf('Feature dimension (pre-PCA): %d\n', size(Ftr, 2));
+fprintf('Training features: %.2f seconds\n', t_train_feat);
+fprintf('Test features: %.2f seconds\n\n', t_test_feat);
 
-% Total training time
-t_total_train = t_patches + t_som + t_train_features + t_svm;
-fprintf('=== Training Summary ===\n');
-fprintf('Total training time: %.2f seconds (%.2f minutes)\n\n', ...
-    t_total_train, t_total_train/60);
-
-%% Stage 5: Extract BoW features from test data
-fprintf('=== Stage 5: Test Feature Extraction ===\n');
-tic;
-test_features = extract_bow_features(testData, som_model, stride, ...
-    'normalize', true, ...
-    'norm_type', norm_type, ...
-    'soft_voting', soft_voting, ...
-    'sigma_bow', sigma_bow, ...
-    'spatial_pyramid', spatial_pyramid, ...
-    'verbose', true);
-t_test_features = toc;
-fprintf('Test feature extraction time: %.2f seconds\n\n', t_test_features);
-
-%% Stage 6: Evaluate on test set
-fprintf('=== Stage 6: Evaluation ===\n');
-tic;
-predictions = predictMulticlassSVM(svm_models, test_features);
-t_predict = toc;
-
-accuracy = sum(predictions == testLabels) / N_test;
-fprintf('Test Accuracy: %.2f%%\n', accuracy * 100);
-fprintf('Prediction time: %.2f seconds\n', t_predict);
-fprintf('Average time per sample: %.4f seconds\n\n', t_predict / N_test);
-
-%% Compute confusion matrix
-conf_matrix = zeros(num_classes, num_classes);
-for i = 1:N_test
-    true_class = testLabels(i);
-    pred_class = predictions(i);
-    conf_matrix(true_class, pred_class) = conf_matrix(true_class, pred_class) + 1;
+if cfg.use_pca
+    fprintf('Applying PCA (retain %.0f%% variance)...\n', cfg.pca_var * 100);
+    [Ftr, Fte, pca_model] = apply_pca(Ftr, Fte, cfg.pca_var);
+    fprintf('Feature dimension after PCA: %d\n\n', size(Ftr, 2));
+    save(fullfile(output_dir, 'pca_model.mat'), 'pca_model');
+else
+    fprintf('PCA disabled; using full feature dimension.\n\n');
 end
 
-% Compute per-class accuracy
+%% Stage 4: Train SVM
+fprintf('=== Stage 4: SVM Training ===\n');
+tic;
+models = trainMulticlassSVM(Ftr, Ytr, num_classes, cfg.C, ...
+    'max_epochs', cfg.svm_epochs, 'lr', cfg.svm_lr, 'verbose', false);
+t_svm = toc;
+fprintf('Time: %.2f seconds\n\n', t_svm);
+
+save(fullfile(output_dir, 'svm_models.mat'), 'models');
+
+t_total_train = t_patches + t_som + t_train_feat + t_svm;
+fprintf('=== Training Summary ===\n');
+fprintf('Total training time: %.2f seconds (%.2f minutes)\n\n', ...
+    t_total_train, t_total_train / 60);
+
+%% Stage 5: Evaluation
+fprintf('=== Stage 5: Evaluation ===\n');
+tic;
+predictions = predictMulticlassSVM(models, Fte);
+t_predict = toc;
+
+accuracy = mean(predictions == Yte);
+fprintf('Test Accuracy: %.2f%%\n', accuracy * 100);
+fprintf('Prediction time: %.2f seconds\n', t_predict);
+fprintf('Per-sample time: %.4f seconds\n\n', t_predict / N_test);
+
+%% Compute Metrics
+conf_matrix = zeros(num_classes, num_classes);
+for i = 1:N_test
+    conf_matrix(Yte(i), predictions(i)) = conf_matrix(Yte(i), predictions(i)) + 1;
+end
+
 class_accuracy = diag(conf_matrix) ./ sum(conf_matrix, 2);
 fprintf('=== Per-Class Accuracy ===\n');
 for c = 1:num_classes
@@ -176,62 +162,50 @@ for c = 1:num_classes
 end
 fprintf('\n');
 
-%% Stage 7: Visualizations
-fprintf('=== Stage 7: Generating Visualizations ===\n');
+%% Stage 6: Visualizations
+fprintf('=== Stage 6: Generating Visualizations ===\n');
 
-% 1. Visualize SOM codebook (learned visual prototypes)
-fprintf('Generating SOM codebook visualization...\n');
+% 1. SOM Codebook
+fprintf('1. SOM codebook...\n');
 fig = figure('Position', [100, 100, 1000, 1000], 'Color', 'white');
 set(fig, 'ToolBar', 'none', 'MenuBar', 'none');
-for i = 1:som_model.num_neurons
-    subplot(som_grid_size(1), som_grid_size(2), i);
-
-    % Reshape weight vector back to patch
-    patch = reshape(som_model.weights(i, :), [patch_size, patch_size]);
-
-    % Normalize for visualization
-    patch = (patch - min(patch(:))) / (max(patch(:)) - min(patch(:)) + 1e-10);
-
-    imshow(patch, []);
+for i = 1:som.num_neurons
+    subplot(cfg.som_grid(1), cfg.som_grid(2), i);
+    patch_img = reshape(som.weights(i, :), [cfg.patch_size, cfg.patch_size]);
+    patch_img = (patch_img - min(patch_img(:))) / (max(patch_img(:)) - min(patch_img(:)) + 1e-10);
+    imshow(patch_img, []);
     axis off;
 end
 saveas(fig, fullfile(output_dir, 'som_codebook.png'));
 close(fig);
 
-% 2. Confusion matrix (matching task7_1 style)
-fprintf('Generating confusion matrix...\n');
-conf_matrix_norm = conf_matrix ./ sum(conf_matrix, 2);
+% 2. U-Matrix
+fprintf('2. U-Matrix...\n');
+plot_som_umatrix(som, fullfile(output_dir, 'som_umatrix.png'));
 
+% 3. Hit Map
+fprintf('3. Hit Map...\n');
+plot_som_hits(patches, som, fullfile(output_dir, 'som_hitmap.png'));
+
+% 4. Confusion Matrix
+fprintf('4. Confusion matrix...\n');
+conf_matrix_norm = conf_matrix ./ sum(conf_matrix, 2);
 fig = figure('Position', [100, 100, 900, 800], 'Color', 'white');
 set(fig, 'ToolBar', 'none', 'MenuBar', 'none');
 imagesc(conf_matrix_norm);
-colormap(flipud(gray));  % Black for high values, white for low
+colormap(flipud(gray));
 colorbar;
 caxis([0, 1]);
-% Set axes background to white
 set(gca, 'Color', 'white');
-
-% Add text annotations (count + percentage)
 for i = 1:num_classes
     for j = 1:num_classes
         count = conf_matrix(i, j);
         percentage = conf_matrix_norm(i, j) * 100;
-
-        % Choose text color based on background
-        if conf_matrix_norm(i, j) > 0.5
-            textColor = 'white';
-        else
-            textColor = 'black';
-        end
-
         text(j, i, sprintf('%d\n(%.1f%%)', count, percentage), ...
-            'HorizontalAlignment', 'center', ...
-            'VerticalAlignment', 'middle', ...
-            'Color', textColor, ...
-            'FontSize', 11);
+            'HorizontalAlignment', 'center', 'VerticalAlignment', 'middle', ...
+            'Color', 'black', 'FontSize', 11);
     end
 end
-
 xlabel('Predicted Class', 'FontSize', 12, 'FontWeight', 'bold', 'Color', 'black');
 ylabel('True Class', 'FontSize', 12, 'FontWeight', 'bold', 'Color', 'black');
 xticks(1:num_classes);
@@ -240,132 +214,91 @@ yticks(1:num_classes);
 yticklabels(class_names);
 axis square;
 grid off;
-
 saveas(fig, fullfile(output_dir, 'confusion_matrix.png'));
 close(fig);
 
-% 3. Per-class accuracy bar chart
-fprintf('Generating per-class accuracy chart...\n');
-fig = figure('Position', [100, 100, 800, 500], 'Color', 'white');
-set(fig, 'ToolBar', 'none', 'MenuBar', 'none');
-bar(1:num_classes, class_accuracy * 100, 'FaceColor', [0.2, 0.4, 0.6]);
-% Set axes background to white and text to black
-set(gca, 'Color', 'white');
-set(gca, 'XColor', 'black');
-set(gca, 'YColor', 'black');
-xlabel('Class', 'FontSize', 12, 'FontWeight', 'bold', 'Color', 'black');
-ylabel('Accuracy (%)', 'FontSize', 12, 'FontWeight', 'bold', 'Color', 'black');
-xticks(1:num_classes);
-xticklabels(class_names);
-ylim([0, 100]);
-grid on;
-set(gca, 'GridColor', [0.8, 0.8, 0.8]);  % Light gray grid
-
-% Add value labels on bars
-for c = 1:num_classes
-    text(c, class_accuracy(c) * 100 + 2, sprintf('%.1f%%', class_accuracy(c) * 100), ...
-        'HorizontalAlignment', 'center', 'FontSize', 10, 'Color', 'black');
-end
-
-saveas(fig, fullfile(output_dir, 'per_class_accuracy.png'));
-close(fig);
-
-% 4. Example BoW histograms for each class (individual figures)
-fprintf('Generating per-class BoW histograms...\n');
-for c = 1:num_classes
-    % Find first test sample of this class
-    idx = find(testLabels == c, 1);
-    if isempty(idx)
-        continue;
-    end
-
-    if spatial_pyramid
-        % Extract global histogram (first num_neurons dimensions)
-        histogram_values = test_features(idx, 1:som_model.num_neurons);
-    else
-        histogram_values = test_features(idx, :);
-    end
-
-    fig = figure('Position', [100, 100, 900, 450], 'Color', 'white');
+% 5. Per-Class Accuracy (optional figure)
+if isfield(cfg, 'plot_per_class_accuracy') && cfg.plot_per_class_accuracy
+    fprintf('5. Per-class accuracy...\n');
+    fig = figure('Position', [100, 100, 800, 500], 'Color', 'white');
     set(fig, 'ToolBar', 'none', 'MenuBar', 'none');
-    bar(1:length(histogram_values), histogram_values, 'FaceColor', [0.3, 0.5, 0.7]);
-    % Set axes background to white and text to black
-    set(gca, 'Color', 'white');
-    set(gca, 'XColor', 'black');
-    set(gca, 'YColor', 'black');
-    xlabel('Visual Word Index', 'FontSize', 10, 'Color', 'black');
-    ylabel('Frequency (Normalized)', 'FontSize', 10, 'Color', 'black');
-    xlim([0, length(histogram_values) + 1]);
+    bar(1:num_classes, class_accuracy * 100, 'FaceColor', [0.2, 0.4, 0.6]);
+    set(gca, 'Color', 'white', 'XColor', 'black', 'YColor', 'black');
+    xlabel('Class', 'FontSize', 12, 'FontWeight', 'bold', 'Color', 'black');
+    ylabel('Accuracy (%)', 'FontSize', 12, 'FontWeight', 'bold', 'Color', 'black');
+    xticks(1:num_classes);
+    xticklabels(class_names);
+    ylim([0, 100]);
     grid on;
-    set(gca, 'GridColor', [0.8, 0.8, 0.8]);  % Light gray grid
-    saveas(fig, fullfile(output_dir, sprintf('bow_hist_%s.png', class_names{c})));
+    set(gca, 'GridColor', [0.8, 0.8, 0.8]);
+    for c = 1:num_classes
+        text(c, class_accuracy(c) * 100 + 2, sprintf('%.1f%%', class_accuracy(c) * 100), ...
+            'HorizontalAlignment', 'center', 'FontSize', 10, 'Color', 'black');
+    end
+    saveas(fig, fullfile(output_dir, 'per_class_accuracy.png'));
     close(fig);
+else
+    fprintf('5. Per-class accuracy plot skipped (see confusion matrix / table).\n');
 end
 
-% Remove legacy collage if it exists to avoid confusion
-legacy_hist_path = fullfile(output_dir, 'bow_histograms.png');
-if exist(legacy_hist_path, 'file')
-    delete(legacy_hist_path);
+% 6. Class-wise Mean BoW
+fprintf('6. Class-wise mean BoW histograms...\n');
+plot_classwise_mean_bow(Fte, Yte, class_names, som.num_neurons, output_dir);
+
+% 7. SVM Margins
+fprintf('7. SVM margin distribution...\n');
+[margins, ~] = multiclass_margins(models, Fte, Yte);
+plot_svm_margins(margins, fullfile(output_dir, 'svm_margins.png'));
+
+% 8. Misclassifications
+fprintf('8. Misclassification examples (one per class)...\n');
+example_idx = [];
+for c = 1:num_classes
+    idx = find((Yte == c) & (predictions ~= c), 1, 'first');
+    if ~isempty(idx)
+        example_idx(end+1) = idx; %#ok<AGROW>
+    end
 end
-
-% 5. Misclassification examples
-fprintf('Generating misclassification examples...\n');
-misclassified_idx = find(predictions ~= testLabels);
-num_examples = min(12, length(misclassified_idx));
-
-if num_examples > 0
-    fig = figure('Position', [100, 100, 1200, 800], 'Color', 'white');
+if ~isempty(example_idx)
+    fig = figure('Position', [100, 100, 260 * numel(example_idx), 280], 'Color', 'white');
     set(fig, 'ToolBar', 'none', 'MenuBar', 'none');
-    for i = 1:num_examples
-        idx = misclassified_idx(i);
-        subplot(3, 4, i);
-        imshow(squeeze(testData(:, :, 1, idx)));
-        hold on;
-        true_class = testLabels(idx);
-        pred_class = predictions(idx);
-        % Overlay prediction info inside the image to avoid figure captions
-        text(4, 12, sprintf('T:%s P:%s', class_names{true_class}, class_names{pred_class}), ...
-            'Color', 'white', 'FontSize', 10, 'FontWeight', 'bold', ...
-            'BackgroundColor', [0, 0, 0], 'Margin', 1);
-        hold off;
+    tiledlayout(1, numel(example_idx), 'Padding', 'compact', 'TileSpacing', 'compact');
+    for i = 1:numel(example_idx)
+        idx = example_idx(i);
+        nexttile;
+        imshow(squeeze(Xte(:, :, 1, idx)));
+        title(sprintf('T:%s  P:%s', class_names{Yte(idx)}, class_names{predictions(idx)}), ...
+            'FontSize', 11, 'FontWeight', 'bold', 'Color', 'k');
     end
     saveas(fig, fullfile(output_dir, 'misclassifications.png'));
     close(fig);
+else
+    fprintf('  All classes predicted correctly; no misclassifications to show.\n');
 end
 
 fprintf('All visualizations saved.\n\n');
 
-%% Save results
+%% Save Results
 fprintf('=== Saving Results ===\n');
+results = struct();
 results.accuracy = accuracy;
 results.confusion_matrix = conf_matrix;
 results.class_accuracy = class_accuracy;
 results.predictions = predictions;
+results.margins = margins;
 results.training_time = t_total_train;
-results.test_time = t_test_features + t_predict;
-results.hyperparameters = struct(...
-    'patch_size', patch_size, ...
-    'num_patch_samples', num_patch_samples, ...
-    'som_grid_size', som_grid_size, ...
-    'som_iterations', som_iterations, ...
-    'stride', stride, ...
-    'norm_type', norm_type, ...
-    'C', C, ...
-    'svm_max_epochs', svm_max_epochs);
+results.test_time = t_test_feat + t_predict;
+results.config = cfg;
 
 save(fullfile(output_dir, 'results.mat'), 'results');
-fprintf('Results saved to %s\n\n', output_dir);
+fprintf('Results saved.\n\n');
 
-%% Final summary
+%% Final Summary
 fprintf('=== Task 7.2 Complete ===\n');
-fprintf('Method: SOM + Bag-of-Visual-Words + SVM\n');
-fprintf('Visual Codebook Size: %d\n', som_model.num_neurons);
-if spatial_pyramid
-    fprintf('Feature Dimension: %d (with 1x1+2x2 spatial pyramid)\n', size(test_features, 2));
-else
-    fprintf('Feature Dimension: %d\n', som_model.num_neurons);
-end
+fprintf('Method: SOM (Mini-batch) + Bag-of-Visual-Words + Linear SVM\n');
+fprintf('Visual Codebook Size: %d\n', som.num_neurons);
+fprintf('Feature Dimension: %d\n', size(Ftr, 2));
 fprintf('Test Accuracy: %.2f%%\n', accuracy * 100);
-fprintf('Total Training Time: %.2f minutes\n', t_total_train/60);
-fprintf('Total Test Time: %.2f seconds\n', t_test_features + t_predict);
+fprintf('Training Time: %.2f minutes\n', t_total_train / 60);
+fprintf('Test Time: %.2f seconds\n', t_test_feat + t_predict);
 fprintf('\nAll outputs saved to: %s\n', output_dir);

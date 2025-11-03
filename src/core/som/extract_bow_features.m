@@ -12,6 +12,7 @@ function features = extract_bow_features(data, som_model, stride, varargin)
 %                'sigma_bow' (default: 1.0) - Neighborhood sigma for soft voting
 %                'spatial_pyramid' (default: false) - Use 1x1 + 2x2 spatial pyramid
 %                'verbose' (default: true)
+%                'min_patch_std' (default: 0.005) - Ignore low-variance patches in histograms
 %
 % Outputs:
 %   features - [N x D] BoW histogram features (D depends on spatial_pyramid)
@@ -24,6 +25,7 @@ function features = extract_bow_features(data, som_model, stride, varargin)
     addParameter(p, 'sigma_bow', 1.0);
     addParameter(p, 'spatial_pyramid', false);
     addParameter(p, 'verbose', true);
+    addParameter(p, 'min_patch_std', 0.005);
     parse(p, varargin{:});
 
     normalize_patches = p.Results.normalize;
@@ -32,12 +34,14 @@ function features = extract_bow_features(data, som_model, stride, varargin)
     sigma_bow = p.Results.sigma_bow;
     spatial_pyramid = p.Results.spatial_pyramid;
     verbose = p.Results.verbose;
+    min_patch_std = p.Results.min_patch_std;
 
     [H, W, ~, N] = size(data);
     num_neurons = som_model.num_neurons;
     patch_size = sqrt(som_model.patch_dim);
 
     % Precompute pairwise distances between neurons for soft voting
+    weight_matrix = []; % Initialize to empty
     if soft_voting
         neuron_coords = som_model.grid_coords;
         % Distance matrix: [num_neurons x num_neurons]
@@ -86,7 +90,7 @@ function features = extract_bow_features(data, som_model, stride, varargin)
             % 1. Global (1x1)
             histograms{1} = extract_region_histogram(img, 1, H, 1, W, ...
                 som_model, patch_size, stride, normalize_patches, ...
-                soft_voting, weight_matrix);
+                soft_voting, weight_matrix, min_patch_std);
 
             % 2-5. Four quadrants (2x2)
             mid_h = floor(H / 2);
@@ -100,17 +104,22 @@ function features = extract_bow_features(data, som_model, stride, varargin)
                 reg = regions{r};
                 histograms{r+1} = extract_region_histogram(img, reg(1), reg(2), reg(3), reg(4), ...
                     som_model, patch_size, stride, normalize_patches, ...
-                    soft_voting, weight_matrix);
+                    soft_voting, weight_matrix, min_patch_std);
             end
 
-            % Concatenate all histograms
-            features(i, :) = [histograms{:}];
+            % Intra-normalize each region then global L2 normalization
+            for r = 1:numel(histograms)
+                h = histograms{r};
+                histograms{r} = h / (norm(h) + 1e-10);
+            end
+            feat = [histograms{:}];
+            features(i, :) = feat / (norm(feat) + 1e-10);
         else
             % Single global histogram
             histogram = extract_region_histogram(img, 1, H, 1, W, ...
                 som_model, patch_size, stride, normalize_patches, ...
-                soft_voting, weight_matrix);
-            features(i, :) = histogram;
+                soft_voting, weight_matrix, min_patch_std);
+            features(i, :) = histogram / (norm(histogram) + 1e-10);
         end
 
         % Progress display
@@ -128,44 +137,61 @@ function features = extract_bow_features(data, som_model, stride, varargin)
 end
 
 function histogram = extract_region_histogram(img, row_start, row_end, col_start, col_end, ...
-    som_model, patch_size, stride, normalize_patches, soft_voting, weight_matrix)
-% Extract histogram from a specific region of the image
+    som_model, patch_size, stride, normalize_patches, soft_voting, weight_matrix, min_patch_std)
+% Extract histogram from a specific region using vectorized BMU search
 
     num_neurons = som_model.num_neurons;
-    histogram = zeros(1, num_neurons);
 
-    % Sliding window extraction in the region
-    for y = row_start:stride:(row_end - patch_size + 1)
-        for x = col_start:stride:(col_end - patch_size + 1)
-            % Extract patch
-            patch = img(y:y+patch_size-1, x:x+patch_size-1);
-            patch_vec = patch(:)';
+    % Region of interest
+    sub_img = img(row_start:row_end, col_start:col_end);
+    [Hreg, Wreg] = size(sub_img);
 
-            % Normalize patch (same as during SOM training)
-            if normalize_patches
-                patch_mean = mean(patch_vec);
-                patch_std = std(patch_vec);
-                if patch_std > 1e-6
-                    patch_vec = (patch_vec - patch_mean) / patch_std;
-                else
-                    patch_vec = patch_vec - patch_mean;
-                end
-            end
-
-            % Find Best Matching Unit (BMU)
-            distances = sum((som_model.weights - patch_vec).^2, 2);
-            [~, bmu_idx] = min(distances);
-
-            if soft_voting
-                % Soft voting: distribute votes to BMU and neighbors
-                histogram = histogram + weight_matrix(bmu_idx, :);
-            else
-                % Hard voting: only increment BMU bin
-                histogram(bmu_idx) = histogram(bmu_idx) + 1;
-            end
-        end
+    % Handle small regions
+    if Hreg < patch_size || Wreg < patch_size
+        histogram = zeros(1, num_neurons);
+        return;
     end
 
-    % Normalize histogram
-    histogram = histogram / (norm(histogram) + 1e-10);  % L2 normalization
+    % 1) Collect all sliding patches then subsample using stride
+    cols = my_im2col(sub_img, [patch_size patch_size], 'sliding'); % [ps^2 x Nall]
+    Hwin = Hreg - patch_size + 1;
+    Wwin = Wreg - patch_size + 1;
+    [yy, xx] = ndgrid(1:Hwin, 1:Wwin);
+    mask = (mod(yy - 1, stride) == 0) & (mod(xx - 1, stride) == 0);
+    cols = cols(:, mask(:));
+
+    if isempty(cols)
+        histogram = zeros(1, num_neurons);
+        return;
+    end
+
+    % 2) Normalize patches row-wise when requested
+    X = cols';
+    patch_std = std(X, 0, 2);
+    valid_mask = patch_std >= min_patch_std;
+    X = X(valid_mask, :);
+
+    if isempty(X)
+        histogram = zeros(1, num_neurons);
+        return;
+    end
+
+    if normalize_patches
+        X = normalize_rows(X);
+    end
+
+    % 3) Vectorized BMU via squared Euclidean distance
+    W = som_model.weights; % [K x D]
+    D2 = bsxfun(@plus, sum(X.^2, 2), sum(W.^2, 2)') - 2 * (X * W');
+    [~, bmu] = min(D2, [], 2);
+
+    % 4) Accumulate votes
+    if soft_voting
+        histogram = sum(weight_matrix(bmu, :), 1);
+    else
+        histogram = accumarray(bmu, 1, [num_neurons, 1])';
+    end
+
+    % 5) L2 normalization with epsilon
+    histogram = histogram / (norm(histogram) + 1e-10);
 end
