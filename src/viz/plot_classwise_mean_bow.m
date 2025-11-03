@@ -38,7 +38,7 @@ function plot_classwise_mean_bow(features, labels, class_names, somK, outdir)
         grid on;
         set(gca, 'GridColor', [0.8, 0.8, 0.8]);
         xlabel('Visual Word Index', 'FontSize', 10, 'Color', 'k');
-        ylabel('Normalized Frequency', 'FontSize', 10, 'Color', 'k');
+        ylabel('Mean Feature Value', 'FontSize', 10, 'Color', 'k');
         title(sprintf('Mean BoW Histogram - Class %s', class_names{c}), ...
             'FontSize', 11, 'FontWeight', 'bold', 'Color', 'black');
 
