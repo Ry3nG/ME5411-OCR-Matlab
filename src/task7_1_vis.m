@@ -28,13 +28,9 @@ end
 model_dir = fullfile(output_base, subdirs(sort_idx(1)).name);
 
 output_dir = fullfile(model_dir, 'figures_regenerated');
-report_dir = fullfile(project_root, 'ME5411-Project-Report', 'figs', 'task7_1');
 
 if ~exist(output_dir, 'dir')
     mkdir(output_dir);
-end
-if ~exist(report_dir, 'dir')
-    mkdir(report_dir);
 end
 
 fprintf('=== Task 7.1: Regenerating All Visualizations ===\n\n');
@@ -142,7 +138,6 @@ for c = 0:num_classes-1
 end
 
 saveas(fig, fullfile(output_dir, 'class_samples.png'));
-copyfile(fullfile(output_dir, 'class_samples.png'), fullfile(report_dir, 'class_samples.png'));
 close(fig);
 fprintf('Saved: class_samples.png\n');
 
@@ -185,7 +180,6 @@ if ~isempty(acc_train) && ~isempty(acc_test) && ~isempty(loss_ar) && ~isempty(lr
     set(gca, 'GridColor', [0.8, 0.8, 0.8]);
 
     saveas(fig, fullfile(output_dir, 'training_curves.png'));
-    copyfile(fullfile(output_dir, 'training_curves.png'), fullfile(report_dir, 'training_curves.png'));
     close(fig);
     fprintf('Saved: training_curves.png\n');
 else
@@ -244,7 +238,6 @@ for i = 1:num_classes
 end
 
 saveas(fig, fullfile(output_dir, 'confusion_matrix.png'));
-copyfile(fullfile(output_dir, 'confusion_matrix.png'), fullfile(report_dir, 'confusion_matrix.png'));
 close(fig);
 fprintf('Saved: confusion_matrix.png\n');
 
@@ -277,7 +270,6 @@ for c = 0:num_classes-1
 end
 
 saveas(fig, fullfile(output_dir, 'correct_predictions.png'));
-copyfile(fullfile(output_dir, 'correct_predictions.png'), fullfile(report_dir, 'correct_predictions.png'));
 close(fig);
 fprintf('Saved: correct_predictions.png\n');
 
@@ -305,7 +297,6 @@ if length(misclass_idx) > 0
     end
 
     saveas(fig, fullfile(output_dir, 'misclassifications.png'));
-    copyfile(fullfile(output_dir, 'misclassifications.png'), fullfile(report_dir, 'misclassifications.png'));
     close(fig);
     fprintf('Saved: misclassifications.png\n');
 end
@@ -333,7 +324,6 @@ if ~isempty(correct_idx)
     axis off;
     set(gca, 'Position', [0 0 1 1]);
     saveas(fig, fullfile(output_dir, 'feature_input.png'));
-    copyfile(fullfile(output_dir, 'feature_input.png'), fullfile(report_dir, 'feature_input.png'));
     close(fig);
 
     % Conv1 feature maps (dynamic grid)
@@ -348,7 +338,6 @@ if ~isempty(correct_idx)
     end
     set(gcf, 'Color', 'white');
     saveas(fig, fullfile(output_dir, 'feature_conv1.png'));
-    copyfile(fullfile(output_dir, 'feature_conv1.png'), fullfile(report_dir, 'feature_conv1.png'));
     close(fig);
 
     % Conv2 feature maps (dynamic grid)
@@ -363,7 +352,6 @@ if ~isempty(correct_idx)
     end
     set(gcf, 'Color', 'white');
     saveas(fig, fullfile(output_dir, 'feature_conv2.png'));
-    copyfile(fullfile(output_dir, 'feature_conv2.png'), fullfile(report_dir, 'feature_conv2.png'));
     close(fig);
 
     % Conv3 feature maps (dynamic grid)
@@ -378,7 +366,6 @@ if ~isempty(correct_idx)
     end
     set(gcf, 'Color', 'white');
     saveas(fig, fullfile(output_dir, 'feature_conv3.png'));
-    copyfile(fullfile(output_dir, 'feature_conv3.png'), fullfile(report_dir, 'feature_conv3.png'));
     close(fig);
 
     fprintf('Saved: feature_input.png, feature_conv1.png, feature_conv2.png, feature_conv3.png\n');
@@ -430,7 +417,6 @@ if ~isempty(misclass_idx)
     axis off;
     set(gca, 'Position', [0 0 1 1]);
     saveas(fig, fullfile(output_dir, 'misclass_input.png'));
-    copyfile(fullfile(output_dir, 'misclass_input.png'), fullfile(report_dir, 'misclass_input.png'));
     close(fig);
 
     % Misclassified Conv3 (top filters)
@@ -445,7 +431,6 @@ if ~isempty(misclass_idx)
     end
     set(gcf, 'Color', 'white');
     saveas(fig, fullfile(output_dir, 'misclass_conv3.png'));
-    copyfile(fullfile(output_dir, 'misclass_conv3.png'), fullfile(report_dir, 'misclass_conv3.png'));
     close(fig);
 
     % Correct input
@@ -454,7 +439,6 @@ if ~isempty(misclass_idx)
     axis off;
     set(gca, 'Position', [0 0 1 1]);
     saveas(fig, fullfile(output_dir, 'correct_input.png'));
-    copyfile(fullfile(output_dir, 'correct_input.png'), fullfile(report_dir, 'correct_input.png'));
     close(fig);
 
     % Correct Conv3 (top filters)
@@ -469,7 +453,6 @@ if ~isempty(misclass_idx)
     end
     set(gcf, 'Color', 'white');
     saveas(fig, fullfile(output_dir, 'correct_conv3.png'));
-    copyfile(fullfile(output_dir, 'correct_conv3.png'), fullfile(report_dir, 'correct_conv3.png'));
     close(fig);
 
     fprintf('Saved: misclass_input.png, misclass_conv3.png, correct_input.png, correct_conv3.png\n');
@@ -478,8 +461,7 @@ end
 %% Summary
 fprintf('\n=== Visualization Complete ===\n');
 fprintf('All figures saved to:\n');
-fprintf('  Output: %s\n', output_dir);
-fprintf('  Report: %s\n\n', report_dir);
+fprintf('  %s\n\n', output_dir);
 fprintf('Generated figures:\n');
 fprintf('  1. class_samples.png - Dataset visualization\n');
 fprintf('  2. training_curves.png - Training dynamics\n');
@@ -494,4 +476,4 @@ fprintf('  10. misclass_input.png - Misclassified input\n');
 fprintf('  11. misclass_conv3.png - Misclassified Conv3 features\n');
 fprintf('  12. correct_input.png - Correctly classified input\n');
 fprintf('  13. correct_conv3.png - Correctly classified Conv3 features\n');
-fprintf('\nAll figures have been copied to the report directory.\n');
+fprintf('\nCopy desired figures to the separate report repository manually if needed.\n');
