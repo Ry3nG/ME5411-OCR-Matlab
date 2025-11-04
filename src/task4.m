@@ -20,7 +20,7 @@ end
 % Read the cropped image from Task 3
 img = imread(croppedImgPath);
 if size(img, 3) == 3
-    img = rgb2gray(img);
+    img = myRgb2gray(img);
 end
 
 % Save grayscale input image

@@ -19,7 +19,7 @@ end
 % Read and convert image to grayscale if needed
 img = imread(imgPath);
 if size(img, 3) == 3
-    img = rgb2gray(img);
+    img = myRgb2gray(img);
 end
 
 % Save original image

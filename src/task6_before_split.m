@@ -16,7 +16,7 @@ outputDir = 'output/task6/';
 % Read the binary image
 binaryImg = imread(binaryImgPath);
 if size(binaryImg, 3) == 3
-    binaryImg = rgb2gray(binaryImg);
+    binaryImg = myRgb2gray(binaryImg);
 end
 if ~islogical(binaryImg)
     binaryImg = binaryImg > 128;

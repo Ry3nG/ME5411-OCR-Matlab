@@ -21,13 +21,13 @@ end
 % Read the binary image from Task 4
 binaryImg = imread(binaryImgPath);
 if size(binaryImg, 3) == 3
-    binaryImg = rgb2gray(binaryImg);
+    binaryImg = myRgb2gray(binaryImg);
 end
 
 % Read the grayscale image for comparison
 grayscaleImg = imread(grayscaleImgPath);
 if size(grayscaleImg, 3) == 3
-    grayscaleImg = rgb2gray(grayscaleImg);
+    grayscaleImg = myRgb2gray(grayscaleImg);
 end
 
 % Convert to logical if needed

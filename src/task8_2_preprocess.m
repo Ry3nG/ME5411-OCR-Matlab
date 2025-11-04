@@ -184,13 +184,14 @@ function img_out = rotate_image(img, angle_deg, H, W)
     Xs = cosA * Xc + sinA * Yc + cx;
     Ys = -sinA * Xc + cosA * Yc + cy;
 
-    rotated = interp2(img_d, Xs, Ys, 'linear', 255);
+    % Custom bilinear interpolation (replacement for interp2)
+    rotated = bilinear_interp2(img_d, Xs, Ys, 255);
     rotated(isnan(rotated)) = 255;
     img_out = uint8(rotated);
 end
 
 function img_out = scale_image(img, scale, H, W)
-    scaled = imresize(img, scale, 'bilinear');
+    scaled = myImresize(img, scale, 'bilinear');
     scaled = uint8(scaled);
     [Hs, Ws] = size(scaled);
 
@@ -300,4 +301,67 @@ function metrics = run_pipeline(Xtr, Ytr, Xte, Yte, cfg, out_dir, exp)
     metrics.config = cfg;
 
     save(fullfile(out_dir, 'results.mat'), 'metrics', 'predictions', 'Yte', 'exp');
+end
+
+function output = bilinear_interp2(img, X, Y, fill_value)
+% Custom bilinear interpolation function (replacement for interp2)
+% Performs bilinear interpolation on 2D grid
+%
+% Input:
+%   img: Input 2D image (grayscale)
+%   X, Y: Coordinate matrices for interpolation points
+%   fill_value: Value to use for out-of-bounds points
+% Output:
+%   output: Interpolated values at (X, Y) coordinates
+
+[H, W] = size(img);
+output = zeros(size(X));
+
+for i = 1:size(X, 1)
+    for j = 1:size(X, 2)
+        x = X(i, j);
+        y = Y(i, j);
+
+        % Check bounds
+        if x < 1 || x > W || y < 1 || y > H
+            output(i, j) = fill_value;
+            continue;
+        end
+
+        % Get surrounding pixel coordinates
+        x1 = floor(x);
+        x2 = ceil(x);
+        y1 = floor(y);
+        y2 = ceil(y);
+
+        % Clamp to valid range
+        x1 = max(1, min(W, x1));
+        x2 = max(1, min(W, x2));
+        y1 = max(1, min(H, y1));
+        y2 = max(1, min(H, y2));
+
+        % Calculate interpolation weights
+        wx = x - x1;
+        wy = y - y1;
+
+        % Handle edge cases where coordinates are integers
+        if x1 == x2
+            wx = 0;
+        end
+        if y1 == y2
+            wy = 0;
+        end
+
+        % Get four corner values
+        val11 = img(y1, x1);
+        val12 = img(y1, x2);
+        val21 = img(y2, x1);
+        val22 = img(y2, x2);
+
+        % Bilinear interpolation
+        val1 = val11 * (1 - wx) + val12 * wx;
+        val2 = val21 * (1 - wx) + val22 * wx;
+        output(i, j) = val1 * (1 - wy) + val2 * wy;
+    end
+end
 end
