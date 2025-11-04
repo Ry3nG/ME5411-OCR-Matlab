@@ -117,27 +117,32 @@ fprintf('Generating class samples visualization...\n');
 invert_input_polarity = false; % show as black background, white glyph (default dataset polarity)
 
 % Select fewer samples from each class for brevity
-num_samples_per_class = 7;
+num_samples_per_class = 4;
 fig = figure('Position', [100, 100, 1400, 900], 'Color', 'white');
 set(fig, 'ToolBar', 'none', 'MenuBar', 'none');
 
 % Build a tight grid (minimal gaps) using manual axes positions
+num_rows = 4;
+num_cols = 7;
 gap = 0.0;                  % gap between tiles (normalized)
 margin_h = 0.005;           % top/bottom margin
 margin_w = 0.005;           % left margin
 margin_w_right = 0.005;     % right margin
-tile_w = (1 - margin_w - margin_w_right - (num_samples_per_class-1)*gap) / num_samples_per_class;
-num_displayed_classes = 4;
-tile_h = (1 - 2*margin_h - (num_displayed_classes-1)*gap) / num_displayed_classes;
+tile_w = (1 - margin_w - margin_w_right - (num_cols-1)*gap) / num_cols;
+tile_h = (1 - 2*margin_h - (num_rows-1)*gap) / num_rows;
 
-for c = 0:min(3, num_classes-1)
+sample_count = 0;
+for c = 0:num_classes-1
     idx = find(labels_train == c+1);
-    % Select 10 evenly spaced samples
+    % Select 4 evenly spaced samples
     selected_idx = idx(round(linspace(1, length(idx), num_samples_per_class)));
 
     for s = 1:num_samples_per_class
-        left = margin_w + (s-1) * (tile_w + gap);
-        bottom = 1 - margin_h - (c+1) * tile_h - c * gap;
+        col = c;  % Each class gets its own column
+        row = s - 1;  % Rows 0, 1, 2, 3 for the 4 samples
+
+        left = margin_w + col * (tile_w + gap);
+        bottom = 1 - margin_h - (row+1) * (tile_h + gap);
 
         img = data_train(:,:,1,selected_idx(s));
         if invert_input_polarity
@@ -150,6 +155,8 @@ for c = 0:min(3, num_classes-1)
         axis(ax, 'off');
         set(ax, 'LooseInset', [0, 0, 0, 0]);
         set(ax, 'XTick', [], 'YTick', [], 'XColor', 'none', 'YColor', 'none');
+
+        sample_count = sample_count + 1;
     end
 end
 
