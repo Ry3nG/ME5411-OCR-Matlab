@@ -113,27 +113,43 @@ fprintf('Train samples: %d\n\n', size(data_train, 4));
 %% 1. Dataset Samples Visualization
 fprintf('Generating class samples visualization...\n');
 
-% Select 10 samples from each class (from training set)
-num_samples_per_class = 10;
-fig = figure('Position', [100, 100, 1400, 1000], 'Color', 'white');
+% Visualization config
+invert_input_polarity = false; % show as black background, white glyph (default dataset polarity)
+
+% Select fewer samples from each class for brevity
+num_samples_per_class = 7;
+fig = figure('Position', [100, 100, 1400, 900], 'Color', 'white');
 set(fig, 'ToolBar', 'none', 'MenuBar', 'none');
 
-for c = 0:num_classes-1
+% Build a tight grid (minimal gaps) using manual axes positions
+gap = 0.0;                  % gap between tiles (normalized)
+margin_h = 0.005;           % top/bottom margin
+margin_w = 0.005;           % left margin
+margin_w_right = 0.005;     % right margin
+tile_w = (1 - margin_w - margin_w_right - (num_samples_per_class-1)*gap) / num_samples_per_class;
+num_displayed_classes = 4;
+tile_h = (1 - 2*margin_h - (num_displayed_classes-1)*gap) / num_displayed_classes;
+
+for c = 0:min(3, num_classes-1)
     idx = find(labels_train == c+1);
     % Select 10 evenly spaced samples
     selected_idx = idx(round(linspace(1, length(idx), num_samples_per_class)));
 
     for s = 1:num_samples_per_class
-        subplot(num_classes, num_samples_per_class, c * num_samples_per_class + s);
-        imshow(data_train(:,:,1,selected_idx(s)), []);
-        axis off;
+        left = margin_w + (s-1) * (tile_w + gap);
+        bottom = 1 - margin_h - (c+1) * tile_h - c * gap;
 
-        % Add class label on the leftmost sample
-        if s == 1
-            ylabel(sprintf('Class %s', class_names{c+1}), ...
-                'FontSize', 12, 'FontWeight', 'bold', 'Rotation', 0, ...
-                'HorizontalAlignment', 'right', 'VerticalAlignment', 'middle');
+        img = data_train(:,:,1,selected_idx(s));
+        if invert_input_polarity
+            img = 1 - img;
         end
+
+        ax = axes('Parent', fig, 'Position', [left, bottom, tile_w, tile_h], ...
+            'Units', 'normalized');
+        imshow(img, []);
+        axis(ax, 'off');
+        set(ax, 'LooseInset', [0, 0, 0, 0]);
+        set(ax, 'XTick', [], 'YTick', [], 'XColor', 'none', 'YColor', 'none');
     end
 end
 
@@ -263,7 +279,11 @@ for c = 0:num_classes-1
         selected_idx = idx(sorted_idx(select_position));
 
         subplot(1, 7, c+1);
-        imshow(data_test(:,:,1,selected_idx), []);
+        img = data_test(:,:,1,selected_idx);
+        if invert_input_polarity
+            img = 1 - img;
+        end
+        imshow(img, []);
         title(sprintf('Class %s', class_names{c+1}), 'FontSize', 10, 'Color', 'black');
         axis off;
     end
@@ -287,7 +307,11 @@ if length(misclass_idx) > 0
         if length(idx) >= 1
             subplot(1, 7, plot_idx);
             sample_idx = idx(1);
-            imshow(data_test(:,:,1,sample_idx), []);
+            img = data_test(:,:,1,sample_idx);
+            if invert_input_polarity
+                img = 1 - img;
+            end
+            imshow(img, []);
             true_class = class_names{labels_test_eval(sample_idx) + 1};
             pred_class = class_names{preds_new(sample_idx) + 1};
             title(sprintf('%s→%s', true_class, pred_class), 'FontSize', 10, 'Color', 'red');
@@ -319,12 +343,13 @@ if ~isempty(correct_idx)
     conv3_activations = cnn_temp.layers{4}.activations;
 
     % Save input image
-    fig = figure('Position', [100, 100, 300, 300], 'Color', 'white');
-    imshow(sample_img, []);
-    axis off;
-    set(gca, 'Position', [0 0 1 1]);
-    saveas(fig, fullfile(output_dir, 'feature_input.png'));
-    close(fig);
+    img = sample_img;
+    if invert_input_polarity
+        img = 1 - img;
+    end
+    % Convert to uint8 and save at original 64x64 size
+    img_uint8 = uint8(255 * img);
+    imwrite(img_uint8, fullfile(output_dir, 'feature_input.png'));
 
     % Conv1 feature maps (dynamic grid)
     [~, ~, conv1_channels] = size(conv1_activations);
@@ -412,12 +437,13 @@ if ~isempty(misclass_idx)
     % Save individual images for LaTeX subfigure layout
 
     % Misclassified input
-    fig = figure('Position', [100, 100, 300, 300], 'Color', 'white');
-    imshow(sample_mis, []);
-    axis off;
-    set(gca, 'Position', [0 0 1 1]);
-    saveas(fig, fullfile(output_dir, 'misclass_input.png'));
-    close(fig);
+    img = sample_mis;
+    if invert_input_polarity
+        img = 1 - img;
+    end
+    % Convert to uint8 and save at original 64x64 size
+    img_uint8 = uint8(255 * img);
+    imwrite(img_uint8, fullfile(output_dir, 'misclass_input.png'));
 
     % Misclassified Conv3 (top filters)
     mis_cols = ceil(sqrt(top_k));
@@ -434,12 +460,13 @@ if ~isempty(misclass_idx)
     close(fig);
 
     % Correct input
-    fig = figure('Position', [100, 100, 300, 300], 'Color', 'white');
-    imshow(sample_cor, []);
-    axis off;
-    set(gca, 'Position', [0 0 1 1]);
-    saveas(fig, fullfile(output_dir, 'correct_input.png'));
-    close(fig);
+    img = sample_cor;
+    if invert_input_polarity
+        img = 1 - img;
+    end
+    % Convert to uint8 and save at original 64x64 size
+    img_uint8 = uint8(255 * img);
+    imwrite(img_uint8, fullfile(output_dir, 'correct_input.png'));
 
     % Correct Conv3 (top filters)
     cor_cols = ceil(sqrt(top_k));

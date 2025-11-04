@@ -1,9 +1,14 @@
-%% Task 7.3: Character Identification on Microchip Label (Image 1)
-% Reuse Task 3/4/6 preprocessing pipeline and evaluate Task 7.1 CNN + Task 7.2 SOM+SVM
+%% Task 7.3: Character Recognition on Image 1
+% Apply both CNN (Task 7.1) and SOM+BoW+SVM (Task 7.2) classifiers
+% to recognize characters in the original charact2.bmp image.
+%
+% Expected text:
+%   Upper part: "HD44780A00"
+%   Lower part: "ZM2"
 
-clear; clc; close all;
+clear; close all; clc;
 
-%% Setup paths
+%% Setup
 script_dir = fileparts(mfilename('fullpath'));
 project_root = fileparts(script_dir);
 cd(project_root);
@@ -11,499 +16,428 @@ cd(project_root);
 addpath(genpath('src/core'));
 addpath(genpath('src/utils'));
 
+fprintf('========================================\n');
+fprintf('   Task 7.3: Character Recognition\n');
+fprintf('========================================\n\n');
+
 %% Configuration
-input_img_path = 'data/charact2.bmp';
-output_dir = 'output/task7_3';
-char_dir = fullfile(output_dir, 'characters');
-prep_dir = fullfile(output_dir, 'prepared');
-report_fig_dir = fullfile(output_dir, 'figures');
+% Model paths
+cnn_checkpoint = 'output/task7_1/11-04_23-37-15/cnn_best_acc.mat';
+som_checkpoint = 'output/task7_2/som_model.mat';
+pca_checkpoint = 'output/task7_2/pca_model.mat';
+svm_checkpoint = 'output/task7_2/svm_models.mat';
+task7_2_results = 'output/task7_2/results.mat';
 
-if ~exist(output_dir, 'dir'); mkdir(output_dir); end
-if ~exist(char_dir, 'dir'); mkdir(char_dir); end
-if ~exist(prep_dir, 'dir'); mkdir(prep_dir); end
-if ~exist(report_fig_dir, 'dir'); mkdir(report_fig_dir); end
+% Image paths (NOTE: file names vs actual content)
+% cropped_HD44780A00.png actually contains "HD44780A00" (lower line)
+% cropped_lower.png actually contains "ZM2" (upper line)
+lower_img_path = 'data/cropped_charact2/cropped_HD44780A00.png';  % HD44780A00
+upper_img_path = 'data/cropped_charact2/cropped_lower.png';  % ZM2
 
-% Cropping rectangles (reuse Task 3 coordinates + mirrored top-line)
-rect_bottom = [50, 200, 900, 150];  % [x, y, width, height]
-rect_top = [50, 35, 900, 150];      % manually mirrored for the top line
+% Output directory
+output_dir = 'output/task7_3/';
+if ~exist(output_dir, 'dir')
+    mkdir(output_dir);
+end
 
-% Segmentation parameters
-min_area = 600;             % filter out tiny noise components
-merge_factor = 1.9;         % width threshold for splitting fused characters
-target_size = 124;          % CNN / BoW expected input resolution
+% Class names (0-indexed in dataset)
 class_names = {'0', '4', '7', '8', 'A', 'D', 'H'};
 
-%% Load and preprocess image
-fprintf('=== Task 7.3: Character Identification ===\n');
-fprintf('Loading image: %s\n', input_img_path);
-img_color = imread(input_img_path);
-if size(img_color, 3) == 3
-    img_gray = myRgb2gray(img_color);
-else
-    img_gray = img_color;
-end
-
-% Save grayscale reference
-imwrite(img_gray, fullfile(output_dir, 'image1_gray.png'));
-
-% Crop top and bottom lines using task3 logic
-top_gray = myImcrop(img_gray, rect_top);
-bottom_gray = myImcrop(img_gray, rect_bottom);
-imwrite(top_gray, fullfile(output_dir, 'top_line_gray.png'));
-imwrite(bottom_gray, fullfile(output_dir, 'bottom_line_gray.png'));
-
-% Binarize each line via Task4 operators
-top_thres = myOtsuThres(top_gray);
-bottom_thres = myOtsuThres(bottom_gray);
-fprintf('Top line Otsu threshold: %.4f\n', top_thres);
-fprintf('Bottom line Otsu threshold: %.4f\n', bottom_thres);
-
-top_binary = myImbinarize(top_gray, top_thres);
-bottom_binary = myImbinarize(bottom_gray, bottom_thres);
-se_noise = myStrel('disk', 1);
-top_binary_clean = myOpen(uint8(top_binary), se_noise) > 0;
-bottom_binary_clean = myOpen(uint8(bottom_binary), se_noise) > 0;
-
-imwrite(uint8(top_binary) * 255, fullfile(output_dir, 'top_line_binary_raw.png'));
-imwrite(uint8(bottom_binary) * 255, fullfile(output_dir, 'bottom_line_binary_raw.png'));
-imwrite(uint8(top_binary_clean) * 255, fullfile(output_dir, 'top_line_binary.png'));
-imwrite(uint8(bottom_binary_clean) * 255, fullfile(output_dir, 'bottom_line_binary.png'));
-
-%% Segment characters from each line (Task6 style)
-fprintf('Segmenting characters on top line...\n');
-[segments_top, next_idx] = segment_line(top_gray, top_binary_clean, rect_top, ...
-    'top', char_dir, 1, min_area, merge_factor);
-fprintf('  -> %d characters extracted from top line\n', numel(segments_top));
-
-fprintf('Segmenting characters on bottom line...\n');
-[segments_bottom, ~] = segment_line(bottom_gray, bottom_binary_clean, rect_bottom, ...
-    'bottom', char_dir, next_idx, min_area, merge_factor);
-fprintf('  -> %d characters extracted from bottom line\n', numel(segments_bottom));
-
-segments_all = [segments_top, segments_bottom];
-num_chars = numel(segments_all);
-fprintf('Total segmented characters: %d\n', num_chars);
-
-%% Prepare canvases for CNN & SOM pipelines
-cnn_batch = zeros(target_size, target_size, 1, num_chars);
-bow_batch = zeros(target_size, target_size, 1, num_chars, 'uint8');
-
-for i = 1:num_chars
-    char_gray = segments_all(i).gray_trim;
-    [canvas_double, canvas_uint8] = prepare_char_canvas(char_gray, target_size);
-
-    cnn_batch(:, :, 1, i) = canvas_double;
-    bow_batch(:, :, 1, i) = canvas_uint8;
-
-    cnn_name = sprintf('cnn_char_%02d.png', i);
-    bow_name = sprintf('bow_char_%02d.png', i);
-    imwrite(canvas_double, fullfile(prep_dir, cnn_name));
-    imwrite(canvas_uint8, fullfile(prep_dir, bow_name));
-
-    segments_all(i).cnn_input = canvas_double;
-    segments_all(i).bow_input = canvas_uint8;
-end
-
-%% Load CNN model (Task 7.1)
-cnn_model_path = 'output/task7_1/11-03_03-17-04/cnn_best_acc.mat';
-fprintf('Loading CNN model: %s\n', cnn_model_path);
-cnn_data = load(cnn_model_path, 'cnn');
+%% Load models
+fprintf('Loading models...\n');
+fprintf('  CNN model: %s\n', cnn_checkpoint);
+cnn_data = load(cnn_checkpoint, 'cnn');
 cnn = cnn_data.cnn;
 
-fprintf('Running CNN inference on %d characters...\n', num_chars);
-[cnn_preds, cnn] = predict(cnn, cnn_batch);
-cnn_scores = cnn.layers{end}.activations;  % softmax output [num_classes x N]
+fprintf('  SOM model: %s\n', som_checkpoint);
+som_data = load(som_checkpoint, 'som');
+som = som_data.som;
 
-cnn_top1 = zeros(num_chars, 1);
-cnn_top2 = zeros(num_chars, 1);
-cnn_conf = zeros(num_chars, 1);
-for i = 1:num_chars
-    [sorted_vals, sorted_idx] = sort(cnn_scores(:, i), 'descend');
-    cnn_top1(i) = sorted_idx(1);
-    cnn_top2(i) = sorted_idx(2);
-    cnn_conf(i) = sorted_vals(1);
+fprintf('  PCA model: %s\n', pca_checkpoint);
+pca_data = load(pca_checkpoint, 'pca_model');
+pca_model = pca_data.pca_model;
+
+fprintf('  SVM models: %s\n', svm_checkpoint);
+svm_data = load(svm_checkpoint, 'models');
+svm_models = svm_data.models;
+
+fprintf('  Task 7.2 config: %s\n', task7_2_results);
+task7_2_data = load(task7_2_results, 'results');
+task7_2_config = task7_2_data.results.config;
+fprintf('Models loaded successfully.\n\n');
+
+%% Process Upper Part (ZM2)
+fprintf('========================================\n');
+fprintf('Processing Upper Part (ZM2)\n');
+fprintf('========================================\n');
+
+% Read and preprocess
+img_upper = imread(upper_img_path);
+if size(img_upper, 3) == 3
+    img_upper = myRgb2gray(img_upper);
 end
 
-%% Load SOM + SVM models (Task 7.2)
-fprintf('Loading SOM + BoW + SVM models...\n');
-som = load('output/task7_2/som_model.mat', 'som');
-som = som.som;
-svm_models = load('output/task7_2/svm_models.mat', 'models');
-svm_models = svm_models.models;
-pca_model = load('output/task7_2/pca_model.mat', 'pca_model');
-pca_model = pca_model.pca_model;
-cfg_struct = load('output/task7_2/results.mat', 'results');
-cfg = cfg_struct.results.config;
+% Binarize using Otsu
+threshold_upper = myOtsuThres(img_upper);
+binary_upper = myImbinarize(img_upper, threshold_upper);
+fprintf('Upper part binarized (Otsu threshold: %.4f)\n', threshold_upper);
 
-fprintf('Extracting BoW features for %d characters...\n', num_chars);
-F_char = extract_bow_features(bow_batch, som, cfg.stride, ...
+% Save binary image
+imwrite(binary_upper, [output_dir, 'binary_upper.png']);
+
+% Segment characters
+[chars_upper, bboxes_upper] = segment_characters(binary_upper, 800);
+fprintf('Segmented %d characters from upper part\n\n', length(chars_upper));
+
+%% Process Lower Part (HD44780A00)
+fprintf('========================================\n');
+fprintf('Processing Lower Part (HD44780A00)\n');
+fprintf('========================================\n');
+
+% Read and preprocess
+img_lower = imread(lower_img_path);
+if size(img_lower, 3) == 3
+    img_lower = myRgb2gray(img_lower);
+end
+
+% Binarize using Otsu
+threshold_lower = myOtsuThres(img_lower);
+binary_lower = myImbinarize(img_lower, threshold_lower);
+fprintf('Lower part binarized (Otsu threshold: %.4f)\n', threshold_lower);
+
+% Save binary image
+imwrite(binary_lower, [output_dir, 'binary_lower.png']);
+
+% Segment characters
+[chars_lower, bboxes_lower] = segment_characters(binary_lower, 300);
+fprintf('Segmented %d characters from lower part\n\n', length(chars_lower));
+
+%% Combine all characters
+all_chars = [chars_upper, chars_lower];
+num_chars = length(all_chars);
+fprintf('Total characters to classify: %d\n\n', num_chars);
+
+% Save individual character images for inspection
+chars_dir = [output_dir, 'characters/'];
+if ~exist(chars_dir, 'dir')
+    mkdir(chars_dir);
+end
+
+for i = 1:num_chars
+    char_img = all_chars{i};
+    filename = sprintf('%schar_%02d.png', chars_dir, i);
+    imwrite(char_img, filename);
+end
+
+%% Prepare characters for classification
+fprintf('========================================\n');
+fprintf('Preparing characters for classification\n');
+fprintf('========================================\n');
+
+% Resize to 64x64 for CNN and feature extraction
+target_size = 64;
+chars_resized = zeros(target_size, target_size, 1, num_chars);
+
+for i = 1:num_chars
+    char_img = all_chars{i};
+
+    % Pad to square
+    [h, w] = size(char_img);
+    max_dim = max(h, w);
+    padded = zeros(max_dim, max_dim);
+    start_y = round((max_dim - h) / 2) + 1;
+    start_x = round((max_dim - w) / 2) + 1;
+    padded(start_y:start_y+h-1, start_x:start_x+w-1) = char_img;
+
+    % Resize to 64x64
+    resized = myImresize(padded, [target_size, target_size]);
+
+    % Normalize to [0, 1]
+    resized = double(resized);
+    if max(resized(:)) > 0
+        resized = resized / max(resized(:));
+    end
+
+    chars_resized(:, :, 1, i) = resized;
+end
+
+fprintf('Characters resized to %dx%d\n\n', target_size, target_size);
+
+%% CNN Classification (Task 7.1) - WITHOUT polarity correction
+fprintf('========================================\n');
+fprintf('CNN Classification (BEFORE Polarity Fix)\n');
+fprintf('========================================\n');
+
+tic;
+[cnn_preds_before, cnn_updated] = predict(cnn, chars_resized);
+cnn_time_before = toc;
+
+% Extract probabilities from the last layer
+cnn_probs_before = cnn_updated.layers{end}.activations;
+
+% Convert predictions to 0-indexed
+cnn_preds_before = cnn_preds_before - 1;
+
+fprintf('CNN classification completed in %.4f seconds\n', cnn_time_before);
+fprintf('Average time per character: %.4f seconds\n\n', cnn_time_before / num_chars);
+
+%% SOM+BoW+SVM Classification (Task 7.2) - WITHOUT polarity correction
+fprintf('========================================\n');
+fprintf('SOM+BoW+SVM (BEFORE Polarity Fix)\n');
+fprintf('========================================\n');
+
+% Extract BoW features
+fprintf('Extracting BoW features...\n');
+tic;
+bow_features_before = extract_bow_features(chars_resized, som, task7_2_config.stride, ...
     'normalize', true, 'norm_type', 'l2', ...
-    'soft_voting', cfg.soft_voting, 'sigma_bow', cfg.sigma_bow, ...
-    'spatial_pyramid', cfg.spatial_pyramid, 'verbose', false, ...
-    'min_patch_std', cfg.min_patch_std);
+    'soft_voting', task7_2_config.soft_voting, ...
+    'sigma_bow', task7_2_config.sigma_bow, ...
+    'spatial_pyramid', task7_2_config.spatial_pyramid, ...
+    'verbose', false, ...
+    'min_patch_std', task7_2_config.min_patch_std);
+feature_time_before = toc;
 
-% Apply saved PCA projection
-F_char_pca = (F_char - pca_model.mu) * pca_model.W;
+% Apply PCA
+bow_features_pca_before = (bow_features_before - pca_model.mu) * pca_model.W;
 
-% Compute class scores (one-vs-rest linear SVMs)
-num_classes = numel(svm_models);
-svm_scores = zeros(num_chars, num_classes);
-for c = 1:num_classes
-    model = svm_models{c};
-    svm_scores(:, c) = F_char_pca * model.w + model.b;
+% SVM prediction
+tic;
+svm_preds_before = predictMulticlassSVM(svm_models, bow_features_pca_before);
+svm_time_before = toc;
+
+% Convert predictions to 0-indexed
+svm_preds_before = svm_preds_before - 1;
+
+total_svm_time_before = feature_time_before + svm_time_before;
+fprintf('SVM classification completed in %.4f seconds\n\n', total_svm_time_before);
+
+%% Apply Polarity Correction
+fprintf('========================================\n');
+fprintf('Applying Polarity Inversion\n');
+fprintf('========================================\n');
+fprintf('Inverting pixel values: x_corrected = 1 - x\n\n');
+
+chars_corrected = 1 - chars_resized;
+
+%% CNN Classification - AFTER polarity correction
+fprintf('========================================\n');
+fprintf('CNN Classification (AFTER Polarity Fix)\n');
+fprintf('========================================\n');
+
+tic;
+[cnn_preds_after, cnn_updated_after] = predict(cnn, chars_corrected);
+cnn_time_after = toc;
+
+% Extract probabilities
+cnn_probs_after = cnn_updated_after.layers{end}.activations;
+
+% Convert predictions to 0-indexed
+cnn_preds_after = cnn_preds_after - 1;
+
+fprintf('CNN classification completed in %.4f seconds\n', cnn_time_after);
+fprintf('Average time per character: %.4f seconds\n\n', cnn_time_after / num_chars);
+
+%% SOM+BoW+SVM Classification - AFTER polarity correction
+fprintf('========================================\n');
+fprintf('SOM+BoW+SVM (AFTER Polarity Fix)\n');
+fprintf('========================================\n');
+
+% Extract BoW features
+fprintf('Extracting BoW features...\n');
+tic;
+bow_features_after = extract_bow_features(chars_corrected, som, task7_2_config.stride, ...
+    'normalize', true, 'norm_type', 'l2', ...
+    'soft_voting', task7_2_config.soft_voting, ...
+    'sigma_bow', task7_2_config.sigma_bow, ...
+    'spatial_pyramid', task7_2_config.spatial_pyramid, ...
+    'verbose', false, ...
+    'min_patch_std', task7_2_config.min_patch_std);
+feature_time_after = toc;
+
+% Apply PCA
+bow_features_pca_after = (bow_features_after - pca_model.mu) * pca_model.W;
+
+% SVM prediction
+tic;
+svm_preds_after = predictMulticlassSVM(svm_models, bow_features_pca_after);
+svm_time_after = toc;
+
+% Convert predictions to 0-indexed
+svm_preds_after = svm_preds_after - 1;
+
+total_svm_time_after = feature_time_after + svm_time_after;
+fprintf('SVM classification completed in %.4f seconds\n\n', total_svm_time_after);
+
+%% Compute Accuracies (only on in-vocabulary characters)
+% In-vocabulary positions: 1 (7 from upper), 4-13 (all from lower HD44780A00)
+% Class mapping (0-indexed): 0->0, 4->1, 7->2, 8->3, A->4, D->5, H->6
+in_vocab_pos = [1, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13];
+% Ground truth: 7, H, D, 4, 4, 7, 8, 0, A, 0, 0 -> indices: 2,6,5,1,1,2,3,0,4,0,0
+ground_truth = [2, 6, 5, 1, 1, 2, 3, 0, 4, 0, 0];  % Already 0-indexed
+
+% CNN accuracies
+cnn_preds_invocab_before = cnn_preds_before(in_vocab_pos);
+cnn_preds_invocab_after = cnn_preds_after(in_vocab_pos);
+cnn_correct_before = sum(cnn_preds_invocab_before == ground_truth');
+cnn_correct_after = sum(cnn_preds_invocab_after == ground_truth');
+cnn_acc_before = cnn_correct_before / length(ground_truth) * 100;
+cnn_acc_after = cnn_correct_after / length(ground_truth) * 100;
+
+% SVM accuracies
+svm_preds_invocab_before = svm_preds_before(in_vocab_pos);
+svm_preds_invocab_after = svm_preds_after(in_vocab_pos);
+svm_correct_before = sum(svm_preds_invocab_before == ground_truth');
+svm_correct_after = sum(svm_preds_invocab_after == ground_truth');
+svm_acc_before = svm_correct_before / length(ground_truth) * 100;
+svm_acc_after = svm_correct_after / length(ground_truth) * 100;
+
+%% Display Results
+fprintf('========================================\n');
+fprintf('Results Summary\n');
+fprintf('========================================\n\n');
+
+fprintf('BEFORE Polarity Fix (Inverted Input):\n');
+fprintf('  CNN:           %d/11 correct (%.1f%%)\n', cnn_correct_before, cnn_acc_before);
+fprintf('  SOM+BoW+SVM:   %d/11 correct (%.1f%%)\n\n', svm_correct_before, svm_acc_before);
+
+fprintf('AFTER Polarity Fix (Corrected Input):\n');
+fprintf('  CNN:           %d/11 correct (%.1f%%)\n', cnn_correct_after, cnn_acc_after);
+fprintf('  SOM+BoW+SVM:   %d/11 correct (%.1f%%)\n\n', svm_correct_after, svm_acc_after);
+
+fprintf('Improvement from Polarity Fix:\n');
+fprintf('  CNN:           %+.1f%% (%.1f%% → %.1f%%)\n', cnn_acc_after - cnn_acc_before, cnn_acc_before, cnn_acc_after);
+fprintf('  SOM+BoW+SVM:   %+.1f%% (%.1f%% → %.1f%%)\n\n', svm_acc_after - svm_acc_before, svm_acc_before, svm_acc_after);
+
+fprintf('Expected Text (in-vocabulary only): 7 HD44780A00\n');
+fprintf('  CNN (before):  %s\n', strjoin(class_names(cnn_preds_before(in_vocab_pos) + 1), ' '));
+fprintf('  CNN (after):   %s\n', strjoin(class_names(cnn_preds_after(in_vocab_pos) + 1), ' '));
+fprintf('  SVM (before):  %s\n', strjoin(class_names(svm_preds_before(in_vocab_pos) + 1), ' '));
+fprintf('  SVM (after):   %s\n', strjoin(class_names(svm_preds_after(in_vocab_pos) + 1), ' '));
+
+%% Visualization: Polarity comparison
+fprintf('\n========================================\n');
+fprintf('Generating Visualizations\n');
+fprintf('========================================\n');
+
+% Load training set samples for comparison
+train_data = load('data/train.mat');
+train_images = train_data.data_train;
+train_labels = train_data.labels_train;
+
+% Select 3 samples from training set (classes 0, 7, H for diversity)
+sample_classes = [0, 2, 6];  % 0-indexed: 0, 7, H
+train_samples = cell(1, 3);
+for i = 1:3
+    cls = sample_classes(i);
+    idx = find(train_labels == cls, 1);
+    train_samples{i} = train_images(:, :, 1, idx);
 end
 
-[~, svm_top1] = max(svm_scores, [], 2);
-svm_top2 = zeros(num_chars, 1);
-svm_margin = zeros(num_chars, 1);
-for i = 1:num_chars
-    [sorted_vals, sorted_idx] = sort(svm_scores(i, :), 'descend');
-    svm_top2(i) = sorted_idx(2);
-    svm_margin(i) = sorted_vals(1) - sorted_vals(2);
+% Create polarity comparison figure with minimal whitespace
+fig = figure('Position', [100, 100, 1200, 280], 'Color', 'white', 'Visible', 'off');
+
+% Left: Test image (inverted polarity)
+subplot('Position', [0.04, 0.12, 0.45, 0.78]);  % [left, bottom, width, height]
+imshow(binary_lower);
+title('Test Image (Inverted Polarity)', 'FontSize', 11, 'FontWeight', 'bold', 'Color', 'black');
+text(size(binary_lower, 2)/2, size(binary_lower, 1)+12, 'Black background, white foreground', ...
+    'HorizontalAlignment', 'center', 'FontSize', 9, 'Color', 'black');
+
+% Right: Training samples (normal polarity)
+subplot('Position', [0.52, 0.12, 0.45, 0.78]);  % Minimal gap
+montage_img = zeros(64, 64*3);
+for i = 1:3
+    montage_img(:, (i-1)*64+1:i*64) = train_samples{i};
 end
+imshow(montage_img);
+title('Training Samples (Normal Polarity)', 'FontSize', 11, 'FontWeight', 'bold', 'Color', 'black');
+text(size(montage_img, 2)/2, size(montage_img, 1)+12, 'White background, black foreground', ...
+    'HorizontalAlignment', 'center', 'FontSize', 9, 'Color', 'black');
 
-%% Aggregate results
-table_lines = strings(num_chars, 1);
-table_idx = zeros(num_chars, 1);
-cnn_pred_labels = strings(num_chars, 1);
-cnn_second_labels = strings(num_chars, 1);
-svm_pred_labels = strings(num_chars, 1);
-svm_second_labels = strings(num_chars, 1);
+saveas(fig, [output_dir, 'polarity_comparison.png']);
+close(fig);
 
-for i = 1:num_chars
-    table_lines(i) = segments_all(i).line;
-    table_idx(i) = segments_all(i).line_index;
-    cnn_pred_labels(i) = string(class_names{cnn_top1(i)});
-    cnn_second_labels(i) = string(class_names{cnn_top2(i)});
-    svm_pred_labels(i) = string(class_names{svm_top1(i)});
-    svm_second_labels(i) = string(class_names{svm_top2(i)});
+fprintf('Visualizations saved.\n\n');
 
-    segments_all(i).cnn_pred = cnn_pred_labels(i);
-    segments_all(i).cnn_conf = cnn_conf(i);
-    segments_all(i).cnn_second = cnn_second_labels(i);
-    segments_all(i).svm_pred = svm_pred_labels(i);
-    segments_all(i).svm_margin = svm_margin(i);
-    segments_all(i).svm_second = svm_second_labels(i);
-end
+%% Save Results
+results = struct();
+results.cnn_predictions_before = cnn_preds_before;
+results.cnn_predictions_after = cnn_preds_after;
+results.cnn_acc_before = cnn_acc_before;
+results.cnn_acc_after = cnn_acc_after;
+results.svm_predictions_before = svm_preds_before;
+results.svm_predictions_after = svm_preds_after;
+results.svm_acc_before = svm_acc_before;
+results.svm_acc_after = svm_acc_after;
+results.in_vocab_positions = in_vocab_pos;
+results.ground_truth = ground_truth;
+results.class_names = class_names;
 
-results_table = table((1:num_chars)', table_lines, table_idx, ...
-    cnn_pred_labels, cnn_conf, cnn_second_labels, ...
-    svm_pred_labels, svm_margin, svm_second_labels, ...
-    'VariableNames', {'CharID', 'Line', 'LineIndex', ...
-    'CNN_Pred', 'CNN_Confidence', 'CNN_Second', ...
-    'SOM_SVM_Pred', 'SOM_SVM_Margin', 'SOM_SVM_Second'});
+save([output_dir, 'results.mat'], 'results');
 
-writetable(results_table, fullfile(output_dir, 'task7_3_predictions.csv'));
-save(fullfile(output_dir, 'task7_3_results.mat'), 'segments_all', ...
-    'cnn_top1', 'cnn_top2', 'cnn_conf', 'svm_top1', 'svm_top2', 'svm_margin', ...
-    'rect_top', 'rect_bottom');
+fprintf('========================================\n');
+fprintf('Task 7.3 Complete\n');
+fprintf('========================================\n');
+fprintf('Results saved to: %s\n', output_dir);
 
-%% Visualization: bounding boxes on original image
-overlay_fig = figure('Name', 'Task 7.3 - Character Localization', ...
-    'Color', 'white', 'Position', [100, 100, 1100, 420]);
-imshow(img_gray); hold on;
-
-for i = 1:num_chars
-    bbox = segments_all(i).bbox_global;
-    rectangle('Position', bbox, 'EdgeColor', 'g', 'LineWidth', 1.8);
-    text(bbox(1), bbox(2) - 8, sprintf('%02d', i), ...
-        'Color', 'g', 'FontSize', 12, 'FontWeight', 'bold');
-end
-
-text(20, 25, sprintf('Total characters: %d', num_chars), ...
-    'Color', 'y', 'FontSize', 14, 'FontWeight', 'bold');
-
-hold off;
-set(gca, 'Position', [0 0 1 1]);
-print(overlay_fig, fullfile(report_fig_dir, 'char_localization.png'), '-dpng', '-r150');
-close(overlay_fig);
-
-%% Visualization: per-character predictions
-cols = 7;
-rows = ceil(num_chars / cols);
-pred_fig = figure('Name', 'Task 7.3 - Character Predictions', ...
-    'Color', 'white', 'Position', [100, 100, 1600, 400]);
-tiledlayout(rows, cols, 'Padding', 'compact', 'TileSpacing', 'compact');
-
-for i = 1:num_chars
-    nexttile;
-    img_show = segments_all(i).cnn_input;
-    imshow(img_show, []);
-    line_tag = upper(char(segments_all(i).line));
-    line_tag = line_tag(1);
-    title(sprintf('#%02d %s-%d\nCNN:%s %.2f\nSOM:%s %.2f', ...
-        i, line_tag, segments_all(i).line_index, ...
-        segments_all(i).cnn_pred, segments_all(i).cnn_conf, ...
-        segments_all(i).svm_pred, segments_all(i).svm_margin), ...
-        'FontSize', 9, 'Color', 'black');
-end
-
-print(pred_fig, fullfile(report_fig_dir, 'char_predictions.png'), '-dpng', '-r150');
-close(pred_fig);
-
-fprintf('All outputs saved under %s\n', output_dir);
-fprintf('Figures saved to %s\n', report_fig_dir);
-
-%% Helper functions
-function [segments, next_idx] = segment_line(gray_img, binary_img, rect_offset, ...
-    line_name, char_dir, start_idx, min_area, merge_factor)
-    % Segment a single line of text using connected components with width-based splitting
-
+%% Helper function: segment_characters
+function [chars, bboxes] = segment_characters(binary_img, min_area)
+    % Find connected components
     CC = myBwconncomp(binary_img);
+
+    % Extract region properties
     props = myRegionprops(CC, 'BoundingBox', 'Area');
 
+    % Filter by area
     valid_idx = [];
-    for i = 1:numel(props)
+    for i = 1:length(props)
         if props(i).Area >= min_area
-            valid_idx(end+1) = i; %#ok<AGROW>
+            valid_idx = [valid_idx, i]; %#ok<AGROW>
         end
     end
 
-    if isempty(valid_idx)
-        segments = struct('line', {}, 'line_index', {}, 'bbox_global', {}, ...
-            'bbox_local', {}, 'gray_trim', {}, 'binary_trim', {}, 'save_path', {});
-        next_idx = start_idx;
-        return;
+    % Sort by x-coordinate (left to right)
+    bboxes_all = zeros(length(valid_idx), 4);
+    for i = 1:length(valid_idx)
+        bboxes_all(i, :) = props(valid_idx(i)).BoundingBox;
     end
 
-    bboxes = zeros(numel(valid_idx), 4);
-    for i = 1:numel(valid_idx)
-        bboxes(i, :) = props(valid_idx(i)).BoundingBox;
-    end
+    [~, sort_idx] = sort(bboxes_all(:, 1));
+    sorted_bboxes = bboxes_all(sort_idx, :);
+    sorted_idx = valid_idx(sort_idx);
 
-    % Sort left-to-right
-    [~, order] = sort(bboxes(:, 1));
-    bboxes = bboxes(order, :);
+    % Segment characters (split merged characters if needed)
+    chars = {};
+    bboxes = [];
 
-    % Estimate merge threshold from lower-quartile glyph width
-    widths = bboxes(:, 3);
-    widths_sorted = sort(widths);
-    q_idx = max(1, round(0.25 * numel(widths_sorted)));
-    ref_width = widths_sorted(q_idx);
-    if ref_width == 0
-        merge_threshold = 0;
-    else
-        merge_threshold = max(ref_width * merge_factor, ref_width + 20);
-    end
+    min_width = min(sorted_bboxes(:, 3));
+    merge_threshold = min_width * 1.8;
 
-    segments = struct('line', {}, 'line_index', {}, 'bbox_global', {}, ...
-        'bbox_local', {}, 'gray_trim', {}, 'binary_trim', {}, 'save_path', {});
-    next_idx = start_idx;
-    line_counter = 0;
+    for i = 1:size(sorted_bboxes, 1)
+        bbox = sorted_bboxes(i, :);
+        x = round(bbox(1));
+        y = round(bbox(2));
+        w = round(bbox(3));
+        h = round(bbox(4));
 
-    for i = 1:size(bboxes, 1)
-        bbox = bboxes(i, :);
-        [char_gray, char_bw, x_base, y_base] = extract_component(gray_img, binary_img, bbox);
+        char_region = binary_img(y:y+h-1, x:x+w-1);
 
-        if isempty(char_gray)
-            continue;
-        end
+        % Check if merged character
+        if w > merge_threshold
+            split_point = round(w / 2);
 
-        [segments, next_idx, line_counter] = process_component(segments, char_gray, char_bw, ...
-            rect_offset, line_name, next_idx, line_counter, char_dir, x_base, y_base, merge_threshold);
-    end
-end
+            char1 = char_region(:, 1:split_point);
+            char2 = char_region(:, split_point+1:end);
 
-function [segments, next_idx, line_counter] = process_component(segments, gray_img, bw_img, ...
-    rect_offset, line_name, next_idx, line_counter, char_dir, x_base, y_base, merge_threshold)
+            chars{end+1} = char1; %#ok<AGROW>
+            bboxes = [bboxes; x, y, split_point, h]; %#ok<AGROW>
 
-    queue = struct('gray', {gray_img}, 'bw', {bw_img}, 'shift', {0});
-
-    while ~isempty(queue)
-        current = queue(1);
-        queue(1) = [];
-
-        width = size(current.bw, 2);
-        split_cols = [];
-
-        if width > merge_threshold && merge_threshold > 0
-            split_cols = detect_vertical_splits(current.bw);
-            if isempty(split_cols) && width > merge_threshold * 1.25
-                split_cols = round(width / 2);
-            end
-        end
-
-        if isempty(split_cols)
-            [segments, next_idx, line_counter] = append_char_segment(segments, current.gray, current.bw, ...
-                rect_offset, line_name, next_idx, line_counter, char_dir, x_base, y_base, current.shift);
+            chars{end+1} = char2; %#ok<AGROW>
+            bboxes = [bboxes; x+split_point, y, w-split_point, h]; %#ok<AGROW>
         else
-            bounds = [1, split_cols, width + 1];
-            for idx = 1:numel(bounds) - 1
-                col_start = bounds(idx);
-                col_end = bounds(idx + 1) - 1;
-                if col_end <= col_start
-                    continue;
-                end
-
-                sub_bw = current.bw(:, col_start:col_end);
-                if ~any(sub_bw(:))
-                    continue;
-                end
-                sub_gray = current.gray(:, col_start:col_end);
-                new_shift = current.shift + col_start - 1;
-
-                queue(end+1) = struct('gray', sub_gray, 'bw', sub_bw, 'shift', new_shift); %#ok<AGROW>
-            end
+            chars{end+1} = char_region; %#ok<AGROW>
+            bboxes = [bboxes; bbox]; %#ok<AGROW>
         end
     end
-end
-
-function split_cols = detect_vertical_splits(bw_img)
-    [height, width] = size(bw_img);
-    if width < 6
-        split_cols = [];
-        return;
-    end
-
-    col_sum = sum(bw_img, 1);
-    smooth_kernel = ones(1, 5) / 5;
-    col_smooth = conv(double(col_sum), smooth_kernel, 'same');
-
-    avg_val = mean(col_smooth);
-    upper_thresh = min(avg_val * 0.45, 0.25 * height);
-    lower_thresh = max(upper_thresh, 0.08 * height);
-    gap_threshold = max(2, lower_thresh);
-
-    gap_mask = col_smooth <= gap_threshold;
-    gap_mask = suppress_short_runs(gap_mask, 3);
-
-    d = diff([0, gap_mask, 0]);
-    start_idx = find(d == 1);
-    stop_idx = find(d == -1) - 1;
-
-    edge_buffer = 2;
-    split_cols = [];
-    for k = 1:numel(start_idx)
-        len = stop_idx(k) - start_idx(k) + 1;
-        if len < 3
-            continue;
-        end
-        if start_idx(k) <= edge_buffer || stop_idx(k) >= width - edge_buffer
-            continue;
-        end
-        seg_min = min(col_smooth(start_idx(k):stop_idx(k)));
-        if seg_min > 0.15 * height
-            continue;
-        end
-        split_cols(end+1) = floor((start_idx(k) + stop_idx(k)) / 2); %#ok<AGROW>
-    end
-    split_cols = unique(split_cols);
-    max_splits = 4;
-    if numel(split_cols) > max_splits
-        split_cols = split_cols(1:max_splits);
-    end
-end
-
-function mask = suppress_short_runs(mask, min_len)
-    mask = logical(mask(:)');
-    d = diff([0, mask, 0]);
-    starts = find(d == 1);
-    stops = find(d == -1) - 1;
-    keep = false(size(mask));
-    for i = 1:numel(starts)
-        if stops(i) - starts(i) + 1 >= min_len
-            keep(starts(i):stops(i)) = true;
-        end
-    end
-    mask = keep;
-end
-
-function [segments, next_idx, line_counter] = append_char_segment(segments, gray_img, bw_img, ...
-    rect_offset, line_name, next_idx, line_counter, char_dir, x_base, y_base, col_shift)
-    % Trim blank borders and append character metadata / image exports
-
-    [bw_trim, gray_trim, row_offset, col_offset] = trim_character(bw_img, gray_img);
-    if isempty(bw_trim) || ~any(bw_trim(:))
-        return;
-    end
-    if size(bw_trim, 1) < 5 || size(bw_trim, 2) < 3
-        return;
-    end
-
-    global_x = rect_offset(1) + x_base + col_shift + col_offset - 2;
-    global_y = rect_offset(2) + y_base + row_offset - 2;
-
-    entry = struct();
-    entry.line = string(line_name);
-    line_counter = line_counter + 1;
-    entry.line_index = line_counter;
-    entry.bbox_global = [global_x, global_y, size(bw_trim, 2), size(bw_trim, 1)];
-    entry.bbox_local = [x_base + col_shift + col_offset - 1, ...
-        y_base + row_offset - 1, size(bw_trim, 2), size(bw_trim, 1)];
-    entry.gray_trim = gray_trim;
-    entry.binary_trim = bw_trim;
-
-    filename = sprintf('%s_char_%02d.png', char(line_name), next_idx);
-    imwrite(uint8(bw_trim) * 255, fullfile(char_dir, filename));
-    entry.save_path = fullfile(char_dir, filename);
-
-    segments = [segments, entry]; %#ok<AGROW>
-    next_idx = next_idx + 1;
-end
-
-function [char_gray, char_bw, x, y] = extract_component(gray_img, binary_img, bbox)
-    % Extract rectangular patch for a connected component
-    x = max(1, floor(bbox(1)));
-    y = max(1, floor(bbox(2)));
-    w = min(size(binary_img, 2) - x + 1, ceil(bbox(3)));
-    h = min(size(binary_img, 1) - y + 1, ceil(bbox(4)));
-
-    char_bw = binary_img(y:y+h-1, x:x+w-1);
-    char_gray = gray_img(y:y+h-1, x:x+w-1);
-end
-
-function [bw_trim, gray_trim, row_offset, col_offset] = trim_character(bw_img, gray_img)
-    % Remove empty rows/columns around the binary glyph
-    rows = any(bw_img, 2);
-    cols = any(bw_img, 1);
-
-    if ~any(rows) || ~any(cols)
-        bw_trim = bw_img;
-        gray_trim = gray_img;
-        row_offset = 1;
-        col_offset = 1;
-        return;
-    end
-
-    row_idx = find(rows);
-    col_idx = find(cols);
-
-    row_start = row_idx(1);
-    row_end = row_idx(end);
-    col_start = col_idx(1);
-    col_end = col_idx(end);
-
-    bw_trim = bw_img(row_start:row_end, col_start:col_end);
-    gray_trim = gray_img(row_start:row_end, col_start:col_end);
-    row_offset = row_start;
-    col_offset = col_start;
-end
-
-function [canvas_double, canvas_uint8] = prepare_char_canvas(char_gray, target_size)
-    % Resize character patch while preserving aspect ratio and center on canvas
-
-    if isa(char_gray, 'uint8')
-        char_double = double(char_gray) / 255;
-    else
-        char_double = mat2gray(char_gray);
-    end
-
-    [h, w] = size(char_double);
-    if h == 0 || w == 0
-        canvas_double = zeros(target_size);
-        canvas_uint8 = uint8(canvas_double);
-        return;
-    end
-
-    margin = 4;
-    scale = min((target_size - margin) / h, (target_size - margin) / w);
-    resized = myImresize(char_double, scale, 'bilinear');
-    [rh, rw] = size(resized);
-
-    canvas_double = zeros(target_size);
-    row_start = floor((target_size - rh) / 2) + 1;
-    col_start = floor((target_size - rw) / 2) + 1;
-    canvas_double(row_start:row_start+rh-1, col_start:col_start+rw-1) = resized;
-
-    canvas_uint8 = uint8(canvas_double * 255);
 end

@@ -44,13 +44,15 @@ function [data_train, labels_train, data_test, labels_test] = loadDataset(data_p
             if sum(strcmp(curr_file, labels_name)) > 0
                 fullPath = fullfile(data_path, curr_file);
                 filesInFolder = dir(fullPath);
-                num_files = length(filesInFolder);
+                num_files = sum(endsWith({filesInFolder.name}, '.png'));
                 num_train = floor(num_files * options.train_ratio);
 
+                png_count = 0;  % Counter for PNG files only
                 for j = 1:length(filesInFolder)
                     filename = filesInFolder(j).name;
 
                     if endsWith(filename, '.png')
+                        png_count = png_count + 1;  % Increment PNG counter
                         processed = processed + 1;
                         if mod(processed, 100) == 0 || processed == total
                             fprintf('Processing: %d/%d (%.1f%%)\n', processed, total, 100*processed/total);
@@ -63,7 +65,7 @@ function [data_train, labels_train, data_test, labels_test] = loadDataset(data_p
                         end
                         label = labelChar2Num(curr_file);
 
-                        if j <= num_train
+                        if png_count <= num_train
 
                             if options.apply_rand_tf && options.rand_tf.prob > rand()
                                 img = randTF(img, options.rand_tf);
