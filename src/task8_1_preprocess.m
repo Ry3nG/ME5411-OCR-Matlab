@@ -1,7 +1,7 @@
-% task8_2_preprocess.m
-% Task 8.2: SVM Data Preprocessing Sensitivity Analysis
+% task8_1_preprocess.m
+% Task 8.1: CNN Data Preprocessing Sensitivity Analysis
 %
-% Tests SVM (BoW + SOM) performance with different data augmentation strategies:
+% Tests CNN performance with different data augmentation strategies:
 %   1. Baseline (no augmentation)
 %   2. Noise augmentation
 %   3. Scale augmentation
@@ -9,20 +9,21 @@
 %   5. Combined augmentation
 %
 % Outputs:
-%   - 5 trained SVM models
+%   - 5 trained CNN models
 %   - Performance comparison table
+%   - Training curves
 %   - Real-world test results (7M2+HD44780A00)
-%   - CNN vs SVM comparison figure
+%   - Ablation analysis figure
 %
 % Usage:
-%   matlab -batch "run('src/task8_2_preprocess.m')"
+%   matlab -batch "run('src/task8_1_preprocess.m')"
 
 clear all; %#ok<CLALL>
 close all;
 
 fprintf('\n');
 fprintf('=========================================\n');
-fprintf('  Task 8.2: SVM Preprocessing Analysis  \n');
+fprintf('  Task 8.1: CNN Preprocessing Analysis  \n');
 fprintf('=========================================\n\n');
 
 %% Setup
@@ -34,30 +35,31 @@ cd(project_root);
 addpath(genpath('src/core'));
 addpath(genpath('src/utils'));
 
-% Set random seed (MUST match Task 7.2 for reproducibility)
+% Set random seed (MUST match Task 7.1 for reproducibility)
 rng(0, 'twister');
 
 %% Configuration
-output_dir = fullfile(project_root, 'output', 'task8_2_preprocess');
+output_dir = fullfile(project_root, 'output', 'task8_1_preprocess');
 if ~exist(output_dir, 'dir')
     mkdir(output_dir);
 end
 
-% BoW + SOM hyperparameters (from Task 7.2 baseline)
-bow_params = struct();
-bow_params.patch_size = 8;
-bow_params.stride = 4;
-bow_params.codebook_size = 100;
-bow_params.spatial_levels = [1, 2];  % 1x1 + 2x2 pyramid
-bow_params.soft_voting = true;
-bow_params.sigma = 0.75;
+% CNN hyperparameters (from Task 7.1 baseline)
+cnn_params = struct();
+cnn_params.img_size = 64;
+cnn_params.num_classes = 7;
+cnn_params.epochs = 30;
+cnn_params.batch_size = 128;
+cnn_params.learning_rate = 0.1;
+cnn_params.lr_schedule = 'linear';
+cnn_params.dropout_rate = 0.2;
 
-fprintf('BoW + SOM Configuration:\n');
-fprintf('  Patch size: %dx%d\n', bow_params.patch_size, bow_params.patch_size);
-fprintf('  Stride: %d\n', bow_params.stride);
-fprintf('  Codebook size: %d\n', bow_params.codebook_size);
-fprintf('  Spatial pyramid: %s\n', mat2str(bow_params.spatial_levels));
-fprintf('  Soft voting sigma: %.2f\n\n', bow_params.sigma);
+fprintf('CNN Configuration:\n');
+fprintf('  Image size: %dx%d\n', cnn_params.img_size, cnn_params.img_size);
+fprintf('  Epochs: %d\n', cnn_params.epochs);
+fprintf('  Batch size: %d\n', cnn_params.batch_size);
+fprintf('  Learning rate: %.3f\n', cnn_params.learning_rate);
+fprintf('  Dropout: %.2f\n\n', cnn_params.dropout_rate);
 
 %% Define augmentation strategies
 strategies = {
@@ -90,6 +92,7 @@ fprintf('  Real-world test samples: %d\n\n', length(realworld_test.labels));
 
 %% Train and evaluate for each strategy
 results = struct();
+training_histories = cell(size(strategies, 1), 1);
 
 for i = 1:size(strategies, 1)
     strategy_name = strategies{i, 1};
@@ -112,8 +115,10 @@ for i = 1:size(strategies, 1)
     if exist(model_file, 'file')
         fprintf('Loading existing model from: %s\n', model_file);
         loaded = load(model_file);
-        model = loaded.model;
+        net = loaded.net;
+        history = loaded.history;
         train_time = loaded.train_time;
+        training_histories{i} = history;
         fprintf('  Model loaded (trained in %.2f minutes)\n', train_time / 60);
     else
         % Load training data
@@ -125,35 +130,38 @@ for i = 1:size(strategies, 1)
         labels_train = labels_train + 1;
         fprintf('  Training samples: %d\n', size(data_train, 4));
 
-        % Train SVM with BoW
-        fprintf('Training SVM with BoW + SOM...\n');
+        % Train CNN
+        fprintf('Training CNN...\n');
         tic;
-        model = train_bow_svm(data_train, labels_train, data_test, labels_test, bow_params);
+        [net, history] = train_cnn(data_train, labels_train, data_test, labels_test, cnn_params);
         train_time = toc;
+
+        training_histories{i} = history;
 
         fprintf('Training completed in %.2f minutes\n', train_time / 60);
 
         % Save model immediately
         fprintf('Saving model to: %s\n', model_file);
-        save(model_file, 'model', 'train_time', '-v7.3');
+        save(model_file, 'net', 'history', 'train_time', '-v7.3');
     end
 
     % Evaluate on validation set
     fprintf('Evaluating on validation set...\n');
-    [val_pred, val_accuracy] = evaluate_bow_svm(model, data_test, labels_test);
+    [val_pred, val_accuracy] = evaluate_cnn(net, data_test, labels_test);
 
     % Evaluate on real-world test set
     fprintf('Evaluating on real-world test set (HD44780A00)...\n');
-    [real_pred, real_accuracy, real_correct] = evaluate_realworld(model, realworld_test);
+    [real_pred, real_accuracy, real_correct] = evaluate_realworld(net, realworld_test);
 
     % Store results
     results.(strategy_name) = struct();
-    results.(strategy_name).model = model;
+    results.(strategy_name).net = net;
     results.(strategy_name).val_accuracy = val_accuracy;
     results.(strategy_name).real_accuracy = real_accuracy;
     results.(strategy_name).real_correct = real_correct;
     results.(strategy_name).real_total = length(realworld_test.labels);
     results.(strategy_name).train_time = train_time;
+    results.(strategy_name).history = history;
 
     fprintf('Results:\n');
     fprintf('  Validation accuracy: %.2f%%\n', val_accuracy * 100);
@@ -164,24 +172,24 @@ end
 
 %% Save all results
 fprintf('Saving results...\n');
-save(fullfile(output_dir, 'results.mat'), 'results', 'strategies', 'bow_params');
+save(fullfile(output_dir, 'results.mat'), 'results', 'training_histories', 'strategies', 'cnn_params');
 
 %% Generate visualizations
 fprintf('\n=========================================\n');
 fprintf('Generating visualizations...\n');
 fprintf('=========================================\n');
 
-% 1. Performance comparison table
+% 1. Training curves comparison
+plot_training_curves(training_histories, strategies, output_dir);
+
+% 2. Performance comparison table
 generate_comparison_table(results, strategies, output_dir);
 
-% 2. Ablation analysis (bar chart)
+% 3. Ablation analysis (bar chart)
 plot_ablation_analysis(results, strategies, output_dir);
 
-% 3. CNN vs SVM comparison (load CNN results)
-compare_cnn_svm(results, strategies, output_dir);
-
 fprintf('\n=========================================\n');
-fprintf('✓ Task 8.2 completed successfully!\n');
+fprintf('✓ Task 8.1 completed successfully!\n');
 fprintf('=========================================\n');
 fprintf('\nResults saved to: %s\n', output_dir);
 fprintf('\nSummary:\n');
@@ -196,89 +204,85 @@ fprintf('\n');
 
 %% Helper Functions
 
-function model = train_bow_svm(data_train, labels_train, data_test, labels_test, params)
-    % Train SVM with BoW + SOM features (Task 7.2 pipeline)
+function [net, history] = train_cnn(data_train, labels_train, data_test, labels_test, params)
+    % Train CNN using Task 7.1 architecture
 
-    fprintf('  Step 1: Extracting patches from training images (random sampling)...\n');
-    % Use Task 7.2's random sampling approach (much faster than sliding window)
-    num_patch_samples = 100000;
-    % IMPORTANT: Use [0,1] data directly (Task 7.2 pipeline)
-    % extract_patches will divide by 255 internally, resulting in [0, 0.00392] range
-    all_patches = extract_patches(data_train, labels_train, params.patch_size, num_patch_samples, ...
-        'normalize', true, 'verbose', true, 'min_patch_std', 0.001);  % Task 7.2 exact value
-    fprintf('    Sampled patches: %d\n', size(all_patches, 1));
+    % Initialize network
+    net = struct();
+    net.img_size = params.img_size;
+    net.num_classes = params.num_classes;
 
-    fprintf('  Step 2: Training SOM for codebook (size=%d)...\n', params.codebook_size);
-    som_net = train_som(all_patches, params.codebook_size);
+    % Architecture (LeNet-like, compatible with initModelParams)
+    % Format: input -> Conv2D (with pooling) -> Conv2D (with pooling) -> Linear -> Linear -> output
+    net.layers = {
+        struct('type', 'input')
+        struct('type', 'Conv2D', 'filterDim', 5, 'numFilters', 6, 'poolDim', 2, 'actiFunc', 'relu')
+        struct('type', 'Conv2D', 'filterDim', 5, 'numFilters', 16, 'poolDim', 2, 'actiFunc', 'relu')
+        struct('type', 'Linear', 'hiddenUnits', 120, 'actiFunc', 'relu')
+        struct('type', 'Linear', 'hiddenUnits', 84, 'actiFunc', 'relu', 'dropout', params.dropout_rate)
+        struct('type', 'output', 'softmax', 1)
+    };
 
-    fprintf('  Step 3: Computing BoW features for training set...\n');
-    train_features = extract_bow_features(data_train, som_net, params.stride, ...
-        'normalize', true, 'norm_type', 'l2', ...
-        'soft_voting', params.soft_voting, 'sigma_bow', params.sigma, ...
-        'spatial_pyramid', true, 'verbose', true, 'min_patch_std', 0.001);  % Task 7.2 exact value
-    fprintf('    Feature dimension: %d\n', size(train_features, 2));
+    % Initialize parameters using initModelParams
+    numClasses = params.num_classes;
+    net = initModelParams(net, data_train, numClasses);
 
-    % Also compute test features for PCA
-    test_features = extract_bow_features(data_test, som_net, params.stride, ...
-        'normalize', true, 'norm_type', 'l2', ...
-        'soft_voting', params.soft_voting, 'sigma_bow', params.sigma, ...
-        'spatial_pyramid', true, 'verbose', false, 'min_patch_std', 0.001);
+    % Create temporary log directory for training history
+    script_dir = fileparts(mfilename('fullpath'));
+    project_root = fileparts(script_dir);
+    temp_log_dir = fullfile(project_root, 'output', 'task8_1_preprocess', 'temp_logs');
+    if ~exist(temp_log_dir, 'dir')
+        mkdir(temp_log_dir);
+    end
 
-    fprintf('  Step 3.5: Applying PCA (retain 95%% variance)...\n');
-    % Apply PCA dimensionality reduction (Task 7.2 pipeline)
-    [train_features_pca, ~, pca_model] = apply_pca(train_features, test_features, 0.95);
-    fprintf('    Feature dimension after PCA: %d -> %d\n', size(train_features, 2), size(train_features_pca, 2));
+    % Training parameters (compatible with learn function)
+    train_params = struct();
+    train_params.epochs = params.epochs;
+    train_params.minibatch = params.batch_size;
+    train_params.lr_max = params.learning_rate;
+    train_params.lr = params.learning_rate;
+    train_params.lr_min = 1e-5;
+    train_params.lr_method = params.lr_schedule;
+    train_params.lr_duty = 20;
+    train_params.momentum = 0.9;
+    train_params.l2_penalty = 0.0005;
+    train_params.use_l2 = true;
+    train_params.verbose = true;
+    train_params.save_best_acc_model = false;
+    train_params.train_mode = true;
+    train_params.log_path = string(temp_log_dir) + "/";  % Convert to string for + operator
 
-    fprintf('  Step 4: Training SVM classifier...\n');
-    % Use custom trainMulticlassSVM (one-vs-rest) from Task 7.2
-    svm_model = trainMulticlassSVM(train_features_pca, labels_train, 7, 1.0);
+    % Set learning rate schedule parameters if needed
+    if strcmp(params.lr_schedule, 'step')
+        train_params.lr_step_size = 10;
+        train_params.lr_gamma = 0.1;
+    elseif strcmp(params.lr_schedule, 'exp')
+        train_params.lr_decay_rate = 0.95;
+    end
 
-    % Package model
-    model = struct();
-    model.som_net = som_net;
-    model.svm_model = svm_model;
-    model.pca_model = pca_model;  % Add PCA model
-    model.params = params;
+    % Train
+    net = learn(net, data_train, labels_train, data_test, labels_test, train_params);
+
+    % Load training history from saved files
+    try
+        acc_test_data = load(fullfile(temp_log_dir, 'acc_test.mat'));
+        acc_train_data = load(fullfile(temp_log_dir, 'acc_train.mat'));
+        history = struct();
+        history.val_accuracy = acc_test_data.acc_test;
+        history.train_accuracy = acc_train_data.acc_train;
+    catch
+        % If files don't exist, create empty history
+        history = struct();
+        history.val_accuracy = [];
+        history.train_accuracy = [];
+    end
 end
 
+function [predictions, accuracy] = evaluate_cnn(net, data, labels)
+    % Evaluate CNN on test data
+    % Directly predict on entire dataset (like Task 7.1)
 
-function som_net = train_som(patches, codebook_size)
-    % Train SOM using custom train_som_batch implementation (from Task 7.2)
-
-    % Determine grid size (square grid)
-    grid_dim = round(sqrt(codebook_size));
-    som_grid = [grid_dim, grid_dim];
-
-    % SOM training parameters (from Task 7.2)
-    som_iterations = 50000;
-    lr_init = 0.5;
-    lr_final = 0.01;
-    sigma_init = max(som_grid) / 2;
-    sigma_final = 0.5;
-    batch_size = 32;
-
-    % Train SOM
-    som_net = train_som_batch(patches, som_grid, som_iterations, ...
-        'lr_init', lr_init, 'lr_final', lr_final, ...
-        'sigma_init', sigma_init, 'sigma_final', sigma_final, ...
-        'batch', batch_size, 'verbose', true);
-end
-
-
-function [predictions, accuracy] = evaluate_bow_svm(model, data, labels)
-    % Evaluate SVM on test data
-
-    % Use [0,1] data directly (Task 7.2 pipeline)
-    features = extract_bow_features(data, model.som_net, model.params.stride, ...
-        'normalize', true, 'norm_type', 'l2', ...
-        'soft_voting', model.params.soft_voting, 'sigma_bow', model.params.sigma, ...
-        'spatial_pyramid', true, 'verbose', false, 'min_patch_std', 0.001);  % Task 7.2 exact value
-
-    % Apply PCA transformation (Task 7.2 pipeline)
-    features_pca = (features - model.pca_model.mu) * model.pca_model.W;
-
-    % Use custom predictMulticlassSVM from Task 7.2
-    predictions = predictMulticlassSVM(model.svm_model, features_pca);
+    [predictions, ~] = predict(net, data);
     accuracy = sum(predictions == labels) / length(labels);
 end
 
@@ -409,7 +413,7 @@ function [chars, bboxes] = segment_characters(binary_img, min_area)
     end
 end
 
-function [predictions, accuracy, num_correct] = evaluate_realworld(model, realworld_data)
+function [predictions, accuracy, num_correct] = evaluate_realworld(net, realworld_data)
     % Evaluate on real-world test data
     % Predict all chars but only evaluate in-vocabulary ones
 
@@ -423,30 +427,51 @@ function [predictions, accuracy, num_correct] = evaluate_realworld(model, realwo
     % Real-world images have different polarity than training data
     data_array = 1 - data_array;
 
-    % Use [0,1] data directly (Task 7.2 pipeline)
-    % Extract BoW features for all characters at once
-    features = extract_bow_features(data_array, model.som_net, model.params.stride, ...
-        'normalize', true, 'norm_type', 'l2', ...
-        'soft_voting', model.params.soft_voting, 'sigma_bow', model.params.sigma, ...
-        'spatial_pyramid', true, 'verbose', false, 'min_patch_std', 0.001);  % Task 7.2 exact value
-
-    % Apply PCA transformation (Task 7.2 pipeline)
-    features_pca = (features - model.pca_model.mu) * model.pca_model.W;
-
-    % Predict all at once using custom predictMulticlassSVM from Task 7.2
-    predictions_all = predictMulticlassSVM(model.svm_model, features_pca);
+    % Predict all at once (like Task 7.3)
+    [all_predictions, ~] = predict(net, data_array);
 
     % Extract in-vocabulary predictions
-    predictions = predictions_all(realworld_data.invocab_positions);
+    predictions = all_predictions(realworld_data.invocab_positions);
 
     % Compare with ground truth
     num_correct = sum(predictions == realworld_data.labels);
     accuracy = num_correct / length(realworld_data.labels);
 end
 
+function plot_training_curves(histories, strategies, output_dir)
+    % Plot training and validation accuracy curves
+
+    figure('Position', [100, 100, 1200, 400], 'Color', 'w');
+
+    colors = lines(length(histories));
+
+    for i = 1:length(histories)
+        history = histories{i};
+        strategy_name = strategies{i, 1};
+
+        plot(1:length(history.val_accuracy), history.val_accuracy * 100, ...
+            'Color', colors(i, :), 'LineWidth', 2, 'DisplayName', strategy_name);
+        hold on;
+    end
+
+    xlabel('Epoch', 'FontSize', 12);
+    ylabel('Validation Accuracy (%)', 'FontSize', 12);
+    title('CNN Training Curves: Data Augmentation Comparison', 'FontSize', 14, 'FontWeight', 'bold');
+    legend('Location', 'southeast', 'FontSize', 10);
+    set(gca, 'Color', 'w');  % Set axes background to white
+    grid on;
+
+    output_file = fullfile(output_dir, 'training_curves.png');
+    % Export with white background
+    exportgraphics(gcf, output_file, 'BackgroundColor', 'white', 'Resolution', 300);
+    fprintf('  Saved: training_curves.png\n');
+    close(gcf);
+end
+
 function generate_comparison_table(results, strategies, output_dir)
     % Generate and save comparison table
 
+    % Create table
     strategy_names = strategies(:, 1);
     val_acc = zeros(length(strategy_names), 1);
     real_acc = zeros(length(strategy_names), 1);
@@ -462,8 +487,9 @@ function generate_comparison_table(results, strategies, output_dir)
         train_time(i) = res.train_time / 60;
     end
 
+    % Save as text
     fid = fopen(fullfile(output_dir, 'comparison_table.txt'), 'w');
-    fprintf(fid, 'SVM Data Augmentation Sensitivity Analysis\n');
+    fprintf(fid, 'CNN Data Augmentation Sensitivity Analysis\n');
     fprintf(fid, '==========================================\n\n');
     fprintf(fid, '%-12s | Val Acc (%%) | Real Test    | Real Acc (%%) | Time (min)\n', 'Strategy');
     fprintf(fid, '-------------|-------------|--------------|--------------|------------\n');
@@ -492,6 +518,7 @@ function plot_ablation_analysis(results, strategies, output_dir)
         real_acc(i) = res.real_accuracy * 100;
     end
 
+    % Create grouped bar chart
     x = 1:length(strategy_names);
     width = 0.35;
 
@@ -499,6 +526,7 @@ function plot_ablation_analysis(results, strategies, output_dir)
     hold on;
     bar(x + width/2, real_acc, width, 'FaceColor', [0.8, 0.4, 0.2]);
 
+    % Add value labels
     for i = 1:length(strategy_names)
         text(x(i) - width/2, val_acc(i) + 1, sprintf('%.1f', val_acc(i)), ...
             'HorizontalAlignment', 'center', 'FontSize', 9);
@@ -511,7 +539,7 @@ function plot_ablation_analysis(results, strategies, output_dir)
     set(gca, 'Color', 'w');  % Set axes background to white
     xlabel('Augmentation Strategy', 'FontSize', 12);
     ylabel('Accuracy (%)', 'FontSize', 12);
-    title('SVM Ablation Analysis: Augmentation Impact', 'FontSize', 14, 'FontWeight', 'bold');
+    title('CNN Ablation Analysis: Augmentation Impact', 'FontSize', 14, 'FontWeight', 'bold');
     legend({'Validation Set', 'Real-world Test (HD44780A00)'}, 'Location', 'southeast', 'FontSize', 10);
     grid on;
     ylim([0, 105]);
@@ -520,76 +548,5 @@ function plot_ablation_analysis(results, strategies, output_dir)
     % Export with white background
     exportgraphics(gcf, output_file, 'BackgroundColor', 'white', 'Resolution', 300);
     fprintf('  Saved: ablation_analysis.png\n');
-    close(gcf);
-end
-
-function compare_cnn_svm(svm_results, strategies, output_dir)
-    % Compare CNN vs SVM performance
-
-    % Load CNN results
-    cnn_results_file = fullfile('output', 'task8_1_preprocess', 'results.mat');
-    if ~exist(cnn_results_file, 'file')
-        fprintf('  Warning: CNN results not found. Skipping comparison.\n');
-        return;
-    end
-
-    cnn_data = load(cnn_results_file);
-    cnn_results = cnn_data.results;
-
-    % Create comparison figure
-    figure('Position', [100, 100, 1200, 600], 'Color', 'w');
-
-    strategy_names = strategies(:, 1);
-    cnn_val = zeros(length(strategy_names), 1);
-    cnn_real = zeros(length(strategy_names), 1);
-    svm_val = zeros(length(strategy_names), 1);
-    svm_real = zeros(length(strategy_names), 1);
-
-    for i = 1:length(strategy_names)
-        name = strategy_names{i};
-        cnn_val(i) = cnn_results.(name).val_accuracy * 100;
-        cnn_real(i) = cnn_results.(name).real_accuracy * 100;
-        svm_val(i) = svm_results.(name).val_accuracy * 100;
-        svm_real(i) = svm_results.(name).real_accuracy * 100;
-    end
-
-    % Subplot 1: Validation accuracy
-    subplot(1, 2, 1);
-    x = 1:length(strategy_names);
-    width = 0.35;
-    bar(x - width/2, cnn_val, width, 'FaceColor', [0.2, 0.6, 0.8]);
-    hold on;
-    bar(x + width/2, svm_val, width, 'FaceColor', [0.8, 0.4, 0.2]);
-    set(gca, 'XTick', x);
-    set(gca, 'XTickLabel', strategy_names);
-    set(gca, 'Color', 'w');  % Set axes background to white
-    xlabel('Augmentation Strategy', 'FontSize', 11);
-    ylabel('Validation Accuracy (%)', 'FontSize', 11);
-    title('Validation Set Performance', 'FontSize', 12, 'FontWeight', 'bold');
-    legend({'CNN', 'SVM (BoW)'}, 'Location', 'southeast');
-    grid on;
-    ylim([85, 100]);
-
-    % Subplot 2: Real-world test accuracy
-    subplot(1, 2, 2);
-    bar(x - width/2, cnn_real, width, 'FaceColor', [0.2, 0.6, 0.8]);
-    hold on;
-    bar(x + width/2, svm_real, width, 'FaceColor', [0.8, 0.4, 0.2]);
-    set(gca, 'XTick', x);
-    set(gca, 'XTickLabel', strategy_names);
-    set(gca, 'Color', 'w');  % Set axes background to white
-    xlabel('Augmentation Strategy', 'FontSize', 11);
-    ylabel('Real-world Test Accuracy (%)', 'FontSize', 11);
-    title('Real-world Test Performance (HD44780A00)', 'FontSize', 12, 'FontWeight', 'bold');
-    legend({'CNN', 'SVM (BoW)'}, 'Location', 'southeast');
-    grid on;
-    ylim([0, 105]);
-
-    sgtitle('CNN vs SVM: Data Augmentation Sensitivity', 'FontSize', 14, 'FontWeight', 'bold');
-
-    output_file = fullfile(output_dir, 'cnn_vs_svm_comparison.png');
-    % Export with white background
-    exportgraphics(gcf, output_file, 'BackgroundColor', 'white', 'Resolution', 300);
-    fprintf('  Saved: cnn_vs_svm_comparison.png\n');
     close(gcf);
 end
