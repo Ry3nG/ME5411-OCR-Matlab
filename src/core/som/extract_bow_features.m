@@ -10,7 +10,10 @@ function features = extract_bow_features(data, som_model, stride, varargin)
 %                'norm_type' (default: 'l2') - 'l1' or 'l2' histogram normalization
 %                'soft_voting' (default: true) - Use soft voting with SOM neighborhood
 %                'sigma_bow' (default: 1.0) - Neighborhood sigma for soft voting
-%                'spatial_pyramid' (default: false) - Use 1x1 + 2x2 spatial pyramid
+
+
+%                'spatial_pyramid' (default: false) - Use spatial pyramid pooling
+%                'pyramid_levels' (default: [1 2]) - Levels for spatial pyramid (each L adds L^2 regions)
 %                'verbose' (default: true)
 %                'min_patch_std' (default: 0.005) - Ignore low-variance patches in histograms
 %
@@ -24,6 +27,7 @@ function features = extract_bow_features(data, som_model, stride, varargin)
     addParameter(p, 'soft_voting', true);
     addParameter(p, 'sigma_bow', 1.0);
     addParameter(p, 'spatial_pyramid', false);
+    addParameter(p, 'pyramid_levels', [1 2]);
     addParameter(p, 'verbose', true);
     addParameter(p, 'min_patch_std', 0.005);
     parse(p, varargin{:});
@@ -33,8 +37,13 @@ function features = extract_bow_features(data, som_model, stride, varargin)
     soft_voting = p.Results.soft_voting;
     sigma_bow = p.Results.sigma_bow;
     spatial_pyramid = p.Results.spatial_pyramid;
+    pyramid_levels = p.Results.pyramid_levels;
     verbose = p.Results.verbose;
     min_patch_std = p.Results.min_patch_std;
+
+    if spatial_pyramid && isempty(pyramid_levels)
+        pyramid_levels = [1 2];
+    end
 
     [H, W, ~, N] = size(data);
     num_neurons = som_model.num_neurons;
@@ -65,13 +74,14 @@ function features = extract_bow_features(data, som_model, stride, varargin)
             fprintf('  Using hard voting (single BMU)\n');
         end
         if spatial_pyramid
-            fprintf('  Using spatial pyramid (1x1 + 2x2)\n');
+            fprintf('  Using spatial pyramid levels: %s\n', mat2str(pyramid_levels));
         end
     end
 
     % Determine feature dimension
     if spatial_pyramid
-        feature_dim = num_neurons * 5;  % 1x1 + 2x2 = 5 blocks
+        total_regions = sum((pyramid_levels.^2));
+        feature_dim = num_neurons * total_regions;
     else
         feature_dim = num_neurons;
     end
@@ -84,27 +94,24 @@ function features = extract_bow_features(data, som_model, stride, varargin)
         img = double(squeeze(data(:, :, 1, i))) / 255.0;
 
         if spatial_pyramid
-            % Extract features from 5 spatial regions
-            histograms = cell(5, 1);
+            total_regions = sum((pyramid_levels.^2));
+            histograms = cell(total_regions, 1);
+            region_idx = 1;
 
-            % 1. Global (1x1)
-            histograms{1} = extract_region_histogram(img, 1, H, 1, W, ...
-                som_model, patch_size, stride, normalize_patches, ...
-                soft_voting, weight_matrix, min_patch_std);
+            for level = pyramid_levels
+                for r = 1:level
+                    row_start = floor((r - 1) * H / level) + 1;
+                    row_end = min(H, floor(r * H / level));
+                    for c = 1:level
+                        col_start = floor((c - 1) * W / level) + 1;
+                        col_end = min(W, floor(c * W / level));
 
-            % 2-5. Four quadrants (2x2)
-            mid_h = floor(H / 2);
-            mid_w = floor(W / 2);
-            regions = {[1, mid_h, 1, mid_w], ...           % Top-left
-                      [1, mid_h, mid_w+1, W], ...         % Top-right
-                      [mid_h+1, H, 1, mid_w], ...         % Bottom-left
-                      [mid_h+1, H, mid_w+1, W]};          % Bottom-right
-
-            for r = 1:4
-                reg = regions{r};
-                histograms{r+1} = extract_region_histogram(img, reg(1), reg(2), reg(3), reg(4), ...
-                    som_model, patch_size, stride, normalize_patches, ...
-                    soft_voting, weight_matrix, min_patch_std);
+                        histograms{region_idx} = extract_region_histogram(img, row_start, row_end, col_start, col_end, ...
+                            som_model, patch_size, stride, normalize_patches, ...
+                            soft_voting, weight_matrix, min_patch_std);
+                        region_idx = region_idx + 1;
+                    end
+                end
             end
 
             % Intra-normalize each region then global L2 normalization

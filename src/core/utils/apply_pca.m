@@ -45,12 +45,76 @@ function [Xtr_pca, Xte_pca, pcaM] = apply_pca(Xtr, Xte, var_keep)
 
     % 6) Project training and test data
     Xtr_pca = (Xtr - mu) * W;             % [N_train x k]
-    Xte_pca = (Xte - mu) * W;             % [N_test x k]
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    if nargin < 2 || isempty(Xte)
+        Xte_pca = [];
+    else
+        Xte_pca = (Xte - mu) * W;         % [N_test x k]
+    end
 
     % 7) Package PCA model
     pcaM = struct();
     pcaM.mu = mu;
     pcaM.W = W;
+    pcaM.coeff = W;                       % Compatibility with older code paths
     pcaM.k = k;
     pcaM.var_keep = var_keep;
     pcaM.explained_var = cumsum_var(k);
